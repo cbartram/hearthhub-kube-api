@@ -8,8 +8,10 @@ This means that the dedicated server arguments (i.e world name, password, crossp
 
 ## Building
 
-To build the docker image run: `docker build . -t hearthhub-server:0.0.1` replacing `0.0.1` with
+To build the docker image run: `docker build . -t cbartram/hearthhub:0.0.1` replacing `0.0.1` with
 the image version you would like to use. 
+
+Push to the defined registry with: `docker push cbartram/hearthhub:0.0.1`
 
 ## Running
 
@@ -17,7 +19,15 @@ You can run the Valheim dedicated server with `./start_server_docker.sh`
 
 ## Deployment
 
-Deployment is managed through Helm.
+Deployment is managed through Helm. To deploy the dedicated server run:
+
+`helm install valheim-server ./manifests/valheim-server -f ./manifests/valheim-server/values.yaml`
+
+You can override specific configuration like game world name, server name, and password with the helm `--set` command.
+
+To deploy the hearthhub-mod-api run:
+
+`helm install hearthhub-mod-api ./manifests/hearthhub-mod-api -f ./manifests/hearthhub-mod-api/values.yaml`
 
 ## Built With
 

@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hearthhub-mod-api
+  namespace: {{.Values.namespace}}
+  labels:
+    app: hearthhub-mod-api
+spec:
+  replicas: {{.Values.replicaCount}}
+  selector:
+    matchLabels:
+      app: hearthhub-mod-api
+  template:
+    metadata:
+      labels:
+        app: hearthhub-mod-api
+    spec:
+      containers:
+        - name: hearthhub-mod-api
+          image: {{.Values.image.repository}}:{{.Values.image.tag}}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: {{.Values.service.targetPort}}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+{{/*          volumeMounts:*/}}
+{{/*            - name: valheim-data*/}}
+{{/*              mountPath: /config*/}}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+{{/*      volumes:*/}}
+{{/*        - name: valheim-data*/}}
+{{/*          persistentVolumeClaim:*/}}
+{{/*            claimName: {{.Release.Name}}-valheim-pvc*/}}
