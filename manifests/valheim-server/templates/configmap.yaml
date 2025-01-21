@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: valheim-config
+data:
+  SERVER_NAME: "My Valheim Server"
+  WORLD_NAME: "Dedicated"
+  SERVER_PASS: "secret123"  # Change this!

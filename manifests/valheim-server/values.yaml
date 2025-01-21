@@ -1,0 +1,44 @@
+replicaCount: 1
+
+name: "valheim-server"
+namespace: "default"
+
+image:
+  repository: hearthub-server
+  pullPolicy: IfNotPresent
+  tag: "0.0.1"
+
+serverConfig:
+  name: "My Server"
+  port: 2456
+  world: "Dedicated"
+  password: "secret"
+  crossplay: true
+
+
+persistence:
+  size: 10Gi
+
+podAnnotations: {}
+podLabels:
+  - app: valheim
+
+securityContext:
+   capabilities:
+     drop:
+     - ALL
+   readOnlyRootFilesystem: true
+   runAsNonRoot: true
+   runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 80
+
+resources:
+  requests:
+    memory: "4Gi"
+    cpu: "2"
+  limits:
+    memory: "6Gi"
+    cpu: "4"
