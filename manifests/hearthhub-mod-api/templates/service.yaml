@@ -9,6 +9,5 @@ spec:
   ports:
     - port: {{.Values.service.port}}
       targetPort: {{.Values.service.targetPort}}
-      nodePort: 30080
       protocol: TCP
   type: {{.Values.service.type}}

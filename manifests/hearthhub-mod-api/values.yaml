@@ -12,20 +12,16 @@ fullnameOverride: ""
 
 
 service:
-  type: NodePort
+  type: ClusterIP
   port: 8080
   targetPort: 8080
 
 ingress:
-  enabled: false
-  className: ""
-  annotations: {}
-  hosts:
-    - host: chart-example.local
-      paths:
-        - path: /
-          pathType: ImplementationSpecific
-  tls: []
+  enabled: true
+  className: nginx
+  serviceName: hearthhub-mod-api-svc
+  port: 80
+  host: hello-world.example
 
 resources:
    limits:
@@ -44,7 +40,4 @@ autoscaling:
 volumes: []
 
 volumeMounts: []
-# - name: foo
-#   mountPath: "/etc/foo"
-#   readOnly: true
 
