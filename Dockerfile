@@ -49,11 +49,20 @@ RUN apt-get update && apt-get install -y \
     libatomic1 \
     libpulse-dev \
     libpulse0 \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 
 WORKDIR /valheim
 RUN cp ./steamclient.so /usr/lib
+
+
+# Install BepInEx
+RUN curl -X GET -LO https://gcdn.thunderstore.io/live/repository/packages/denikson-BepInExPack_Valheim-5.4.2202.zip && \
+    unzip ./denikson-BepInExPack_Valheim-5.4.2202.zip -d /tmp && \
+    rm ./denikson-BepInExPack_Valheim-5.4.2202.zip && \
+    cp -r /tmp/BepInExPack_Valheim/. . && \
+    ls -ltr
 
 # Set default values for arguments & server required env vars
 ENV SERVER_NAME="My Server" \
@@ -61,8 +70,12 @@ ENV SERVER_NAME="My Server" \
     WORLD_NAME="Dedicated" \
     SERVER_PASS="secret" \
     CROSSPLAY="true" \
+    DOORSTOP_ENABLE="TRUE" \
+    DOORSTOP_INVOKE_DLL_PATH=/valheim/BepInEx/core/BepInEx.Preloader.dll \
+    DOORSTOP_CORLIB_OVERRIDE_PATH=/valheim/unstripped_corlib \
     PATH="/irongate:${PATH}" \
-    LD_LIBRARY_PATH=/valheim/linux64 \
+    LD_LIBRARY_PATH=/valheim/linux64:/valheim/doorstop_libs \
+    LD_PRELOAD=/valheim/doorstop_libs/libdoorstop_x64.so \
     SteamAppId=892970
 
 # Make the server executable

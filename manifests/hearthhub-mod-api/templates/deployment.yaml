@@ -29,11 +29,11 @@ spec:
           livenessProbe:
             httpGet:
               path: /
-              port: http
+              port: {{.Values.service.targetPort}}
           readinessProbe:
             httpGet:
               path: /
-              port: http
+              port: {{.Values.service.targetPort}}
 {{/*      volumes:*/}}
 {{/*        - name: valheim-data*/}}
 {{/*          persistentVolumeClaim:*/}}

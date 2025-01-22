@@ -1,12 +1,12 @@
 replicaCount: 1
 
 name: "valheim-server"
-namespace: "default"
+namespace: "runewraith"
 
 image:
   repository: cbartram/hearthhub
   pullPolicy: IfNotPresent
-  tag: "0.0.1"
+  tag: "0.0.6"
 
 serverConfig:
   name: "My Server"
