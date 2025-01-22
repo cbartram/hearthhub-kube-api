@@ -8,6 +8,7 @@ spec:
   selector:
     app: {{ .Release.Name }}-valheim
   ports:
+    # TODO Shouldn't Nodeport be 2456? else how would a client outside my network connect?
     - name: game
       port: {{ .Values.serverConfig.port }}
       targetPort: {{ .Values.serverConfig.port }}

@@ -1,7 +1,7 @@
 replicaCount: 1
 
 name: "valheim-server"
-namespace: "runewraith"
+namespace: "hearthhub"
 
 image:
   repository: cbartram/hearthhub

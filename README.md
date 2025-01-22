@@ -6,6 +6,29 @@ script in a generic ubuntu image.
 
 This means that the dedicated server arguments (i.e world name, password, crossplay etc...) can be modified when the image is deployed or run.
 
+## Architecture
+
+The diagram below represents the general architecture for this repository.
+
+```mermaid
+flowchart TD
+    A[API Request] -->|POST /plugins| B[API Server]
+    B -->|Create Job| D[Plugin Manager Service]
+    D -->|Download Plugin| E[Plugin Storage]
+    D -->|Extract to Volume| F[Shared Volume]
+    G[Valheim Server Pod] -->|Mount| F
+    
+    subgraph Kubernetes Cluster
+        B
+        C
+        D
+        E
+        F
+        G
+    end
+
+```
+
 ## Building
 
 To build the docker image run: `docker build . -t cbartram/hearthhub:0.0.1` replacing `0.0.1` with
