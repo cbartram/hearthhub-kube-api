@@ -1,18 +1,14 @@
 package main
 
 import (
-	"github.com/gin-gonic/gin"
-	"net/http"
+	"context"
+	"github.com/cbartram/hearthhub-mod-api/server"
+	"log"
 )
 
 func main() {
-	r := gin.Default()
-
-	r.GET("/", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "Hello World!",
-		})
-	})
-
-	r.Run(":8080")
+	err := server.NewRouter(context.Background()).Run(":8080")
+	if err != nil {
+		log.Fatal(err)
+	}
 }

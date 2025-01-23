@@ -4,7 +4,7 @@ namespace: hearthhub
 image:
   repository: cbartram/hearthhub-mod-api
   pullPolicy: IfNotPresent
-  tag: "0.0.1"
+  tag: "0.0.3"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -12,9 +12,10 @@ fullnameOverride: ""
 
 
 service:
-  type: ClusterIP
+  type: NodePort
   port: 8080
   targetPort: 8080
+  nodePort: 32426
 
 ingress:
   enabled: true

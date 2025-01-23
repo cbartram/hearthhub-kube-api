@@ -61,9 +61,7 @@ RUN cp ./steamclient.so /usr/lib
 RUN curl -X GET -LO https://gcdn.thunderstore.io/live/repository/packages/denikson-BepInExPack_Valheim-5.4.2202.zip && \
     unzip ./denikson-BepInExPack_Valheim-5.4.2202.zip -d /tmp && \
     rm ./denikson-BepInExPack_Valheim-5.4.2202.zip && \
-    cp -r /tmp/BepInExPack_Valheim/. . && \
-    ls -ltr
-
+    cp -r /tmp/BepInExPack_Valheim/. .
 # Set default values for arguments & server required env vars
 ENV SERVER_NAME="My Server" \
     SERVER_PORT=2456 \

@@ -16,7 +16,7 @@ serverConfig:
   crossplay: true
 
 persistence:
-  size: 10Gi
+  size: 2Gi
 
 resources:
   requests:

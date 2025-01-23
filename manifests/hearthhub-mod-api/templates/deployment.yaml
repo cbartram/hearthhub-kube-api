@@ -23,18 +23,11 @@ spec:
             - containerPort: {{.Values.service.targetPort}}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-{{/*          volumeMounts:*/}}
-{{/*            - name: valheim-data*/}}
-{{/*              mountPath: /config*/}}
           livenessProbe:
             httpGet:
-              path: /
+              path: /api/v1/health
               port: {{.Values.service.targetPort}}
           readinessProbe:
             httpGet:
-              path: /
+              path: /api/v1/health
               port: {{.Values.service.targetPort}}
-{{/*      volumes:*/}}
-{{/*        - name: valheim-data*/}}
-{{/*          persistentVolumeClaim:*/}}
-{{/*            claimName: {{.Release.Name}}-valheim-pvc*/}}
