@@ -15,6 +15,7 @@ spec:
       labels:
         app: hearthhub-mod-api
     spec:
+      serviceAccountName: hearthhub-api-sa
       containers:
         - name: hearthhub-mod-api
           image: {{.Values.image.repository}}:{{.Values.image.tag}}
@@ -22,6 +23,8 @@ spec:
           envFrom:
             - secretRef:
                 name: cognito-secrets
+            - configMapRef:
+                name: server-resource-config
           ports:
             - containerPort: {{.Values.service.targetPort}}
           resources:

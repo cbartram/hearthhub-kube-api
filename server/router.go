@@ -11,10 +11,12 @@ import (
 
 func LogrusMiddleware(logger *logrus.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		logger.WithFields(logrus.Fields{
-			"user-agent": c.Request.UserAgent(),
-			"error":      c.Errors.ByType(gin.ErrorTypePrivate).String(),
-		}).Infof("[%s] %s: ", c.Request.Method, c.Request.URL.Path)
+		if c.Request.URL.Path != "/api/v1/health" {
+			logger.WithFields(logrus.Fields{
+				"user-agent": c.Request.UserAgent(),
+				"error":      c.Errors.ByType(gin.ErrorTypePrivate).String(),
+			}).Infof("[%s] %s: ", c.Request.Method, c.Request.URL.Path)
+		}
 		c.Next()
 	}
 }

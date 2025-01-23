@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 
 // GenerateInstanceId Generates a unique alphanumeric instance id with a given length. This is used to ensure deployments,
 // and PVC's in the same namespace do not have conflicts. It is also used to generate a unique id for a playfab for the

@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"net/http"
+	"os"
 	"strconv"
 )
 
@@ -235,10 +236,11 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, request *Create
 					},
 				},
 				Spec: corev1.PodSpec{
+					ServiceAccountName: "hearthhub-api-sa",
 					Containers: []corev1.Container{
 						{
 							Name:  "valheim",
-							Image: "cbartram/hearthhub:0.0.6", // TODO Make this env var and load from configmap on server via helm deployment
+							Image: fmt.Sprintf("%s:%s", os.Getenv("VALEIM_IMAGE_NAME"), os.Getenv("VALHEIM_IMAGE_VERSION")),
 							Args:  serverArgs,
 							Ports: []corev1.ContainerPort{
 								{
@@ -248,12 +250,12 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, request *Create
 							},
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("4"), // TODO also store these in cm
-									corev1.ResourceMemory: resource.MustParse("6Gi"),
+									corev1.ResourceCPU:    resource.MustParse(os.Getenv("CPU_LIMIT")),
+									corev1.ResourceMemory: resource.MustParse(os.Getenv("MEMORY_LIMIT")),
 								},
 								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("2"),
-									corev1.ResourceMemory: resource.MustParse("4Gi"),
+									corev1.ResourceCPU:    resource.MustParse(os.Getenv("CPU_REQUEST")),
+									corev1.ResourceMemory: resource.MustParse(os.Getenv("MEMORY_REQUEST")),
 								},
 							},
 							VolumeMounts: []corev1.VolumeMount{
