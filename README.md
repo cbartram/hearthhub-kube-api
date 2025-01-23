@@ -1,8 +1,9 @@
 # HearthHub Mod API
+
 An API running on the dedicated linux machine for interfacing with the Valheim server. This repository
 contains a docker image which runs the Valheim server. Unlike the docker image that comes pre-packaged with the Valheim
 dedicated server this image installs the server directly onto the image rather than running a separate 
-script in a generic ubuntu image.
+script in a generic ubuntu image. It also pre-packages BepInEx and configures it for use within the server
 
 This means that the dedicated server arguments (i.e world name, password, crossplay etc...) can be modified when the image is deployed or run.
 
@@ -26,23 +27,43 @@ flowchart TD
         F
         G
     end
-
 ```
 
 ## Building
 
-To build the docker image run: `docker build . -t cbartram/hearthhub:0.0.1` replacing `0.0.1` with
-the image version you would like to use. 
+To build the docker image  for the Valheim server run: `./scripts/build_server.sh 0.0.1` replacing `0.0.1` with
+the image version you would like to use. You should then update the version in the `./manifests/valheim-server/values.yaml`
+file to match your built image.
 
-Push to the defined registry with: `docker push cbartram/hearthhub:0.0.1`
-
-## Running
-
-You can run the Valheim dedicated server with `./start_server_docker.sh`
+Run the `./scripts/build_api.sh` to do the same for the API image.
 
 ## Deployment
 
-Deployment is managed through Helm. To deploy the dedicated server run:
+### Kubernetes Setup 
+Deployment is managed through Helm and Minikube. Follow the [MiniKube setup guide](https://minikube.sigs.k8s.io/docs/start/) to the point where you have your cluster running.
+Install [Helm](https://helm.sh) using their [installation script](https://helm.sh/docs/intro/install/).
+
+Create the `hearthhub` namespace on your cluster with: `kubectl create ns hearthhub`. It's also useful to have the 
+`Ingress` addon with MiniKube configured. You can configure this with `minikube addons enable ingress`.
+
+Since the API makes updates to custom AWS Cognito user attributes, make sure to enter the AWS Cognito related secrets for running the API:
+
+```shell
+ kubectl create secret generic app-secrets \
+   --from-literal=USER_POOL_ID=us-east-1_example \
+   --from-literal=COGNITO_CLIENT_ID=abc123example \
+   --from-literal=COGNITO_CLIENT_SECRET=supersecretvalue
+```
+
+Finally, you should update your `/etc/hosts/` file with the DNS entry for your API:
+
+```shell
+# Add this to /etc/hosts
+127.0.0.1 hearthhub-api.example
+```
+
+### Deploying Valheim and HearthHub API
+To deploy the dedicated server run:
 
 `helm install valheim-server ./manifests/valheim-server -f ./manifests/valheim-server/values.yaml`
 
@@ -52,12 +73,25 @@ To deploy the hearthhub-mod-api run:
 
 `helm install hearthhub-mod-api ./manifests/hearthhub-mod-api -f ./manifests/hearthhub-mod-api/values.yaml`
 
+## Running
+
+You can run the Valheim dedicated server with `./start_server_docker.sh`
+
+API setup:
+
+```shell
+ kubectl create secret generic app-secrets \
+   --from-literal=USER_POOL_ID=us-east-1_example \
+   --from-literal=COGNITO_CLIENT_ID=abc123example \
+   --from-literal=COGNITO_CLIENT_SECRET=supersecretvalue
+```
+
 ## Built With
 
 - [Kubernetes](https://kubernetes.io) - Container orchestration platform
 - [Helm](https://helm.sh) - Manages Kubernetes deployments
 - [Docker](https://docker.io/) - Container build tool
-- [Stean](https://steam.com) - CLI used to install Valheim dedicated server
+- [Steam](https://steam.com) - CLI used to install Valheim dedicated server
 
 ## Contributing
 

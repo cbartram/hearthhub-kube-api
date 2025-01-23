@@ -3,12 +3,16 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
+	"github.com/cbartram/hearthhub-mod-api/server/service"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+	"io"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"net/http"
@@ -44,6 +48,10 @@ const (
 	RESOURCES     = "resources"
 	RAIDS         = "raids"
 	PORTALS       = "portals"
+
+	// Server states
+	RUNNING    = "running"
+	TERMINATED = "terminated"
 )
 
 type ServerConfig struct {
@@ -66,14 +74,79 @@ type ServerModifier struct {
 	ModifierValue string
 }
 
+type CreateServerRequest struct {
+	DiscordId       string
+	Name            string
+	Port            string
+	World           string
+	Password        string
+	EnableCrossplay bool
+	Public          bool
+	Modifiers       []ServerModifier
+}
+
+type ValheimDedicatedServer struct {
+	Name            string
+	Port            string
+	World           string
+	Password        string
+	EnableCrossplay bool
+	Public          bool
+	PodName         string
+	PvcName         string
+	DeploymentName  string
+	State           string
+}
+
 type CreateServerHandler struct{}
 
 // HandleRequest Handles the /api/v1/server/create to create a new Valheim dedicated server container.
 func (h *CreateServerHandler) HandleRequest(c *gin.Context, ctx context.Context) {
-	//config := MakeServerConfigWithDefaults()
-	c.JSON(http.StatusOK, gin.H{
-		"status": "OK",
-	})
+	bodyRaw, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		log.Errorf("could not read body from request: %s", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not read body from request: " + err.Error()})
+		return
+	}
+
+	var reqBody CreateServerRequest
+	if err := json.Unmarshal(bodyRaw, &reqBody); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+		return
+	}
+
+	config := MakeServerConfigWithDefaults(reqBody.Name, reqBody.World, reqBody.Port, reqBody.Password, reqBody.EnableCrossplay, reqBody.Public, reqBody.Modifiers)
+	valheimServer, err := CreateDedicatedServerDeployment(config)
+	if err != nil {
+		log.Errorf("could not create dedicated server deployment: %s", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create dedicated server deployment: " + err.Error()})
+		return
+	}
+
+	// Update user info in Cognito with valheim server data.
+	cognito := service.MakeCognitoService()
+	user, err := cognito.GetUser(ctx, &reqBody.DiscordId)
+	if err != nil {
+		log.Errorf("could not get cognito user: %s", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("could not get cognito user for id: %s: %s", reqBody.DiscordId, err.Error())})
+		return
+	}
+
+	serverData, err := json.Marshal(valheimServer)
+	if err != nil {
+		log.Errorf("failed to marshall server data to json:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to marshall server data to json: %s", err.Error())})
+		return
+	}
+
+	attr := MakeAttribute("custom:server_details", string(serverData))
+	err = cognito.UpdateUserAttributes(ctx, &user.Credentials.AccessToken, []types.AttributeType{attr})
+	if err != nil {
+		log.Errorf("failed to update server details in cognito user attribute: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to update server details in cognito user attribute: %v", err)})
+	}
+
+	c.JSON(http.StatusOK, valheimServer)
 }
 
 func MakeServerConfigWithDefaults(name, world, port, password string, crossplay bool, public bool, modifiers []ServerModifier) *ServerConfig {
@@ -94,7 +167,8 @@ func MakeServerConfigWithDefaults(name, world, port, password string, crossplay 
 	}
 }
 
-func CreateDedicatedServerDeployment(serverConfig *ServerConfig) {
+// CreateDedicatedServerDeployment Creates the valheim dedicated server deployment and pvc given the server configuration.
+func CreateDedicatedServerDeployment(serverConfig *ServerConfig) (*ValheimDedicatedServer, error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		log.Fatalf("could not create in cluster config: %v", err.Error())
@@ -140,19 +214,20 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig) {
 	}
 
 	serverPort, _ := strconv.Atoi(serverConfig.Port)
-	pvcName := fmt.Sprintf("valheim-server-pvc-%s", serverConfig.InstanceId)
+	pvcName := fmt.Sprintf("valheim-pvc-%s", serverConfig.InstanceId)
+	deploymentName := fmt.Sprintf("valheim-%s", serverConfig.InstanceId)
 
 	// Create deployment object
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "valheim-server",
+			Name:      deploymentName,
 			Namespace: "hearthhub",
 			Labels: map[string]string{
 				"app": "valheim",
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: int32Ptr(1),
+			Replicas: Int32Ptr(1),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"app": "valheim",
@@ -230,19 +305,29 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig) {
 	// Create deployment and PVC in the cluster
 	pvcCreateResult, err := clientset.CoreV1().PersistentVolumeClaims("hearthhub").Create(context.TODO(), pvc, metav1.CreateOptions{})
 	if err != nil {
-		log.Fatalf("Error creating pvc: %v", err)
+		log.Errorf("Error creating pvc: %v", err)
+		return nil, err
 	}
 
 	log.Infof("created PVC: %s", pvcCreateResult.Name)
 
 	result, err := clientset.AppsV1().Deployments("hearthhub").Create(context.TODO(), deployment, metav1.CreateOptions{})
 	if err != nil {
-		log.Fatalf("Error creating deployment: %v", err)
+		log.Errorf("Error creating deployment: %v", err)
+		return nil, err
 	}
 	log.Infof("created deployment %q in namespace %q\n", result.GetObjectMeta().GetName(), result.GetObjectMeta().GetNamespace())
-}
 
-// Helper function to convert int to *int32
-func int32Ptr(i int32) *int32 {
-	return &i
+	return &ValheimDedicatedServer{
+		Name:            serverConfig.Name,
+		Port:            serverConfig.Port,
+		World:           serverConfig.World,
+		Password:        serverConfig.Password,
+		EnableCrossplay: serverConfig.EnableCrossplay,
+		Public:          serverConfig.Public,
+		PodName:         "",
+		PvcName:         pvcCreateResult.GetName(),
+		DeploymentName:  result.GetObjectMeta().GetName(),
+		State:           RUNNING,
+	}, nil
 }

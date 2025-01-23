@@ -61,8 +61,9 @@ RUN cp ./steamclient.so /usr/lib
 RUN curl -X GET -LO https://gcdn.thunderstore.io/live/repository/packages/denikson-BepInExPack_Valheim-5.4.2202.zip && \
     unzip ./denikson-BepInExPack_Valheim-5.4.2202.zip -d /tmp && \
     rm ./denikson-BepInExPack_Valheim-5.4.2202.zip && \
-    cp -r /tmp/BepInExPack_Valheim/. .
-# Set default values for arguments & server required env vars
+    cp -r /tmp/BepInExPack_Valheim/. . \
+
+# Set default values for arguments & server required env vars although these will be overriden by Kubernetes spec.container.args
 ENV SERVER_NAME="My Server" \
     SERVER_PORT=2456 \
     WORLD_NAME="Dedicated" \
@@ -76,8 +77,6 @@ ENV SERVER_NAME="My Server" \
     LD_PRELOAD=/valheim/doorstop_libs/libdoorstop_x64.so \
     SteamAppId=892970
 
-# Make the server executable
 RUN chmod +x valheim_server.x86_64
 
-#CMD /bin/bash
 CMD ["./valheim_server.x86_64", "-name", "${SERVER_NAME}", "-port", "${SERVER_PORT}", "-world", "${WORLD_NAME}", "-password", "${SERVER_PASS}", "-crossplay"]
