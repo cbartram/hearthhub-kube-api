@@ -70,8 +70,8 @@ type ServerConfig struct {
 }
 
 type ServerModifier struct {
-	ModifierKey   string
-	ModifierValue string
+	ModifierKey   string `json:"key"`
+	ModifierValue string `json:"value"`
 }
 
 type CreateServerRequest struct {
@@ -87,10 +87,10 @@ type CreateServerRequest struct {
 
 type ValheimDedicatedServer struct {
 	WorldDetails   CreateServerRequest `json:"world_details"`
-	PodName        string
-	PvcName        string
-	DeploymentName string
-	State          string
+	PodName        string              `json:"pod_name"`
+	PvcName        string              `json:"pvc_name"`
+	DeploymentName string              `json:"deployment_name"`
+	State          string              `json:"state"`
 }
 
 type CreateServerHandler struct{}
