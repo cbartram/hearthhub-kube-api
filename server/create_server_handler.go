@@ -240,7 +240,7 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, request *Create
 					Containers: []corev1.Container{
 						{
 							Name:  "valheim",
-							Image: fmt.Sprintf("%s:%s", os.Getenv("VALEIM_IMAGE_NAME"), os.Getenv("VALHEIM_IMAGE_VERSION")),
+							Image: fmt.Sprintf("%s:%s", os.Getenv("VALHEIM_IMAGE_NAME"), os.Getenv("VALHEIM_IMAGE_VERSION")),
 							Args:  serverArgs,
 							Ports: []corev1.ContainerPort{
 								{

@@ -23,6 +23,8 @@ spec:
           envFrom:
             - secretRef:
                 name: cognito-secrets
+            - secretRef:
+                name: aws-creds
             - configMapRef:
                 name: server-resource-config
           ports:

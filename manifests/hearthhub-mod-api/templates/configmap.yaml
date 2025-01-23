@@ -6,7 +6,8 @@ metadata:
 data:
   VALHEIM_IMAGE_NAME: "cbartram/hearthhub"
   VALHEIM_IMAGE_VERSION: "0.0.6"
-  CPU_REQUEST: "4"
+  AWS_REGION: "us-east-1"
+  CPU_REQUEST: "2"
   MEMORY_REQUEST: "4Gi"
-  CPU_LIMIT: "4"
+  CPU_LIMIT: "2"
   MEMORY_LIMIT: "6Gi"
