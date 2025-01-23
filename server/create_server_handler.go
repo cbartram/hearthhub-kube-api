@@ -75,27 +75,22 @@ type ServerModifier struct {
 }
 
 type CreateServerRequest struct {
-	DiscordId       string
-	Name            string
-	Port            string
-	World           string
-	Password        string
-	EnableCrossplay bool
-	Public          bool
-	Modifiers       []ServerModifier
+	DiscordId       string           `json:"discord_id"`
+	Name            string           `json:"name"`
+	Port            string           `json:"port"`
+	World           string           `json:"world"`
+	Password        string           `json:"password"`
+	EnableCrossplay bool             `json:"enable_crossplay"`
+	Public          bool             `json:"public"`
+	Modifiers       []ServerModifier `json:"modifiers"`
 }
 
 type ValheimDedicatedServer struct {
-	Name            string
-	Port            string
-	World           string
-	Password        string
-	EnableCrossplay bool
-	Public          bool
-	PodName         string
-	PvcName         string
-	DeploymentName  string
-	State           string
+	WorldDetails   CreateServerRequest `json:"world_details"`
+	PodName        string
+	PvcName        string
+	DeploymentName string
+	State          string
 }
 
 type CreateServerHandler struct{}
@@ -116,7 +111,7 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, ctx context.Context)
 	}
 
 	config := MakeServerConfigWithDefaults(reqBody.Name, reqBody.World, reqBody.Port, reqBody.Password, reqBody.EnableCrossplay, reqBody.Public, reqBody.Modifiers)
-	valheimServer, err := CreateDedicatedServerDeployment(config)
+	valheimServer, err := CreateDedicatedServerDeployment(config, &reqBody)
 	if err != nil {
 		log.Errorf("could not create dedicated server deployment: %s", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create dedicated server deployment: " + err.Error()})
@@ -168,7 +163,7 @@ func MakeServerConfigWithDefaults(name, world, port, password string, crossplay 
 }
 
 // CreateDedicatedServerDeployment Creates the valheim dedicated server deployment and pvc given the server configuration.
-func CreateDedicatedServerDeployment(serverConfig *ServerConfig) (*ValheimDedicatedServer, error) {
+func CreateDedicatedServerDeployment(serverConfig *ServerConfig, request *CreateServerRequest) (*ValheimDedicatedServer, error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		log.Fatalf("could not create in cluster config: %v", err.Error())
@@ -319,15 +314,10 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig) (*ValheimDedica
 	log.Infof("created deployment %q in namespace %q\n", result.GetObjectMeta().GetName(), result.GetObjectMeta().GetNamespace())
 
 	return &ValheimDedicatedServer{
-		Name:            serverConfig.Name,
-		Port:            serverConfig.Port,
-		World:           serverConfig.World,
-		Password:        serverConfig.Password,
-		EnableCrossplay: serverConfig.EnableCrossplay,
-		Public:          serverConfig.Public,
-		PodName:         "",
-		PvcName:         pvcCreateResult.GetName(),
-		DeploymentName:  result.GetObjectMeta().GetName(),
-		State:           RUNNING,
+		WorldDetails:   *request,
+		PodName:        "",
+		PvcName:        pvcCreateResult.GetName(),
+		DeploymentName: result.GetObjectMeta().GetName(),
+		State:          RUNNING,
 	}, nil
 }

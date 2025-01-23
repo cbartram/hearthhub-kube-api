@@ -75,16 +75,10 @@ To deploy the hearthhub-mod-api run:
 
 ## Running
 
-You can run the Valheim dedicated server with `./start_server_docker.sh`
+Before you can actually make requests to the API you need to run `minikube tunnel` in a separate terminal window and **keep it open**.
+This ensures that requests can be correctly proxied to the cluster from the local machine.
 
-API setup:
-
-```shell
- kubectl create secret generic app-secrets \
-   --from-literal=USER_POOL_ID=us-east-1_example \
-   --from-literal=COGNITO_CLIENT_ID=abc123example \
-   --from-literal=COGNITO_CLIENT_SECRET=supersecretvalue
-```
+Check the API is running with: `curl http://hearthhub-api.example/api/v1/health` You should see: `{"status": "OK"}`
 
 ## Built With
 

@@ -50,7 +50,7 @@ func NewRouter(ctx context.Context) *gin.Engine {
 		})
 	})
 
-	serverGroup.POST("/discord/oauth", func(c *gin.Context) {
+	serverGroup.POST("/create", func(c *gin.Context) {
 		handler := CreateServerHandler{}
 		handler.HandleRequest(c, ctx)
 	})
