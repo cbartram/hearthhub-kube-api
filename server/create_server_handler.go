@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 	"github.com/cbartram/hearthhub-mod-api/server/service"
+	"github.com/cbartram/hearthhub-mod-api/server/util"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -77,6 +78,7 @@ type ServerModifier struct {
 
 type CreateServerRequest struct {
 	DiscordId       string           `json:"discord_id"`
+	RefreshToken    string           `json:"refresh_token,omitempty"`
 	Name            string           `json:"name"`
 	Port            string           `json:"port"`
 	World           string           `json:"world"`
@@ -111,6 +113,8 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, ctx context.Context)
 		return
 	}
 
+	// TODO Validate port, modifiers, etc...
+
 	config := MakeServerConfigWithDefaults(reqBody.Name, reqBody.World, reqBody.Port, reqBody.Password, reqBody.EnableCrossplay, reqBody.Public, reqBody.Modifiers)
 	valheimServer, err := CreateDedicatedServerDeployment(config, &reqBody)
 	if err != nil {
@@ -121,25 +125,25 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, ctx context.Context)
 
 	// Update user info in Cognito with valheim server data.
 	cognito := service.MakeCognitoService()
-	user, err := cognito.GetUser(ctx, &reqBody.DiscordId)
+	log.Infof("authenticating user with discord id: %s", reqBody.DiscordId)
+	user, err := cognito.AuthUser(ctx, &reqBody.RefreshToken, &reqBody.DiscordId)
 	if err != nil {
-		log.Errorf("could not get cognito user: %s", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("could not get cognito user for id: %s: %s", reqBody.DiscordId, err.Error())})
-		return
+		log.Errorf("could not authenticate user with refresh token: %v", err)
 	}
 
 	serverData, err := json.Marshal(valheimServer)
 	if err != nil {
-		log.Errorf("failed to marshall server data to json:", err)
+		log.Errorf("failed to marshall server data to json: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to marshall server data to json: %s", err.Error())})
 		return
 	}
 
-	attr := MakeAttribute("custom:server_details", string(serverData))
+	attr := util.MakeAttribute("custom:server_details", string(serverData))
 	err = cognito.UpdateUserAttributes(ctx, &user.Credentials.AccessToken, []types.AttributeType{attr})
 	if err != nil {
 		log.Errorf("failed to update server details in cognito user attribute: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to update server details in cognito user attribute: %v", err)})
+		return
 	}
 
 	c.JSON(http.StatusOK, valheimServer)
@@ -154,7 +158,7 @@ func MakeServerConfigWithDefaults(name, world, port, password string, crossplay 
 		Password:              password,
 		EnableCrossplay:       crossplay,
 		Public:                public,
-		InstanceId:            GenerateInstanceId(8),
+		InstanceId:            util.GenerateInstanceId(8),
 		Modifiers:             modifiers,
 		SaveIntervalSeconds:   1800,
 		BackupCount:           3,
@@ -165,6 +169,8 @@ func MakeServerConfigWithDefaults(name, world, port, password string, crossplay 
 
 // CreateDedicatedServerDeployment Creates the valheim dedicated server deployment and pvc given the server configuration.
 func CreateDedicatedServerDeployment(serverConfig *ServerConfig, request *CreateServerRequest) (*ValheimDedicatedServer, error) {
+	// Ensures the refresh token doesn't get echo'd in the response
+	request.RefreshToken = ""
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		log.Fatalf("could not create in cluster config: %v", err.Error())
@@ -223,7 +229,7 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, request *Create
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: Int32Ptr(1),
+			Replicas: util.Int32Ptr(1),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"app": "valheim",

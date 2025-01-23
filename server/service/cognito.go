@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
+	"github.com/cbartram/hearthhub-mod-api/server/util"
 	log "github.com/sirupsen/logrus"
 	"os"
 	"path/filepath"
@@ -61,7 +63,7 @@ func (m *CognitoService) GetUserAttributes(ctx context.Context, accessToken *str
 	user, err := m.cognitoClient.GetUser(ctx, &cognitoidentityprovider.GetUserInput{AccessToken: accessToken})
 
 	if err != nil {
-		log.Errorf("could not get user with access token: %s", err.Error())
+		log.Errorf("could not get user with access token: %v", err)
 		return nil, errors.New("could not get user with access token")
 	}
 
@@ -75,8 +77,8 @@ func (m *CognitoService) UpdateUserAttributes(ctx context.Context, accessToken *
 	})
 
 	if err != nil {
-		log.Errorf("could not update user attributes with access token: %s", err.Error())
-		return errors.New("could not update user attributes with access token")
+		log.Errorf("could not update user attributes with access token: %v", err)
+		return errors.New(fmt.Sprintf("could not update user attributes with access token: %v", err))
 	}
 
 	return nil
@@ -89,8 +91,8 @@ func (m *CognitoService) GetUser(ctx context.Context, discordId *string) (*Cogni
 	})
 
 	if err != nil {
-		log.Errorf("no user exists with username: %s", *discordId, err.Error())
-		return nil, errors.New("could not get user with username: " + *discordId)
+		log.Errorf("no user exists with username: %s, error: %v", *discordId, err)
+		return nil, errors.New(fmt.Sprintf("could not get user with username: %s", *discordId))
 	}
 
 	var email, discordID, discordUsername, cognitoID string
@@ -114,5 +116,62 @@ func (m *CognitoService) GetUser(ctx context.Context, discordId *string) (*Cogni
 		Email:           email,
 		CognitoID:       cognitoID,
 		AccountEnabled:  user.Enabled,
+	}, nil
+}
+
+func (m *CognitoService) AuthUser(ctx context.Context, refreshToken, userId *string) (*CognitoUser, error) {
+	auth, err := m.cognitoClient.AdminInitiateAuth(ctx, &cognitoidentityprovider.AdminInitiateAuthInput{
+		UserPoolId: aws.String(m.userPoolID),
+		ClientId:   aws.String(m.clientID),
+		AuthFlow:   types.AuthFlowTypeRefreshTokenAuth,
+		AuthParameters: map[string]string{
+			"REFRESH_TOKEN": *refreshToken,
+			"SECRET_HASH":   util.MakeCognitoSecretHash(*userId, m.clientID, m.clientSecret),
+		},
+	})
+
+	if err != nil {
+		log.Errorf("error auth: user %s could not be authenticated: %s", *userId, err)
+		return nil, err
+	}
+
+	user, err := m.cognitoClient.AdminGetUser(ctx, &cognitoidentityprovider.AdminGetUserInput{
+		UserPoolId: aws.String(m.userPoolID),
+		Username:   userId,
+	})
+
+	if err != nil {
+		log.Errorf("could not get user with username: %s: error: %s", *userId, err.Error())
+		return nil, err
+	}
+
+	var email, discordID, discordUsername, cognitoID string
+	for _, attr := range user.UserAttributes {
+		switch aws.ToString(attr.Name) {
+		case "email":
+			email = aws.ToString(attr.Value)
+		case "sub":
+			cognitoID = aws.ToString(attr.Value)
+		case "custom:discord_id":
+			discordID = aws.ToString(attr.Value)
+		case "custom:discord_username":
+			discordUsername = aws.ToString(attr.Value)
+		}
+	}
+
+	// Note: we still authenticate a disabled user the service side handles updating UI/auth flows
+	// to re-auth with discord.
+	return &CognitoUser{
+		DiscordUsername: discordUsername,
+		DiscordID:       discordID,
+		Email:           email,
+		CognitoID:       cognitoID,
+		AccountEnabled:  user.Enabled,
+		Credentials: CognitoCredentials{
+			AccessToken:     *auth.AuthenticationResult.AccessToken,
+			RefreshToken:    *refreshToken,
+			TokenExpiration: auth.AuthenticationResult.ExpiresIn,
+			IdToken:         *auth.AuthenticationResult.IdToken,
+		},
 	}, nil
 }

@@ -1,6 +1,9 @@
-package server
+package util
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 	"math/rand"
 	"time"
@@ -32,4 +35,15 @@ func MakeAttribute(key, value string) types.AttributeType {
 		Value: &value,
 	}
 	return attr
+}
+
+// MakeCognitoSecretHash Creates a hash based on the user id, service id and secret which must be
+// sent with every cognito auth request (along with a refresh token) to get a new access token.
+func MakeCognitoSecretHash(userId, clientId, clientSecret string) string {
+	usernameClientID := userId + clientId
+	hash := hmac.New(sha256.New, []byte(clientSecret))
+	hash.Write([]byte(usernameClientID))
+	digest := hash.Sum(nil)
+
+	return base64.StdEncoding.EncodeToString(digest)
 }
