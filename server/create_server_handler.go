@@ -129,6 +129,8 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, ctx context.Context)
 	user, err := cognito.AuthUser(ctx, &reqBody.RefreshToken, &reqBody.DiscordId)
 	if err != nil {
 		log.Errorf("could not authenticate user with refresh token: %v", err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("could not authenticate user with refresh token: %s", err)})
+		return
 	}
 
 	serverData, err := json.Marshal(valheimServer)
@@ -142,7 +144,7 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, ctx context.Context)
 	err = cognito.UpdateUserAttributes(ctx, &user.Credentials.AccessToken, []types.AttributeType{attr})
 	if err != nil {
 		log.Errorf("failed to update server details in cognito user attribute: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to update server details in cognito user attribute: %v", err)})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("failed to update server details in cognito user attribute: %v", err)})
 		return
 	}
 
