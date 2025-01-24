@@ -19,7 +19,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"time"
 )
 
 const (
@@ -221,7 +220,6 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, request *Create
 	serverPort, _ := strconv.Atoi(serverConfig.Port)
 	pvcName := fmt.Sprintf("valheim-pvc-%s", serverConfig.InstanceId)
 	deploymentName := fmt.Sprintf("valheim-%s", serverConfig.InstanceId)
-	now := time.Now().Format(time.RFC3339)
 
 	// Create deployment object
 	deployment := &appsv1.Deployment{
@@ -242,14 +240,15 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, request *Create
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"app":        "valheim",
-						"created-by": deploymentName,
-						"created-at": now,
+						"app":               "valheim",
+						"created-by":        deploymentName,
+						"tenant-discord-id": request.DiscordId,
 					},
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: "hearthhub-api-sa",
 					Containers: []corev1.Container{
+						// Main dedicated server container
 						{
 							Name:  "valheim",
 							Image: fmt.Sprintf("%s:%s", os.Getenv("VALHEIM_IMAGE_NAME"), os.Getenv("VALHEIM_IMAGE_VERSION")),
@@ -286,6 +285,23 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, request *Create
 								},
 							},
 						},
+						// Sidecar Backups Container
+						{
+							Name:  "world-backup-sidecar",
+							Image: "cbartram/hearthhub-sidecar:0.0.1",
+							Args:  serverArgs,
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "valheim-plugin-data",
+									MountPath: "/valheim/BepInEx/plugins/",
+									SubPath:   "plugins",
+								},
+								{
+									Name:      "valheim-server-data",
+									MountPath: "/root/.config/unity3d/IronGate/Valheim",
+								},
+							},
+						},
 					},
 					Volumes: []corev1.Volume{
 						{
@@ -319,9 +335,9 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, request *Create
 			Name:      pvcName,
 			Namespace: "hearthhub",
 			Labels: map[string]string{
-				"app":        "valheim",
-				"created-by": deploymentName,
-				"created-at": now,
+				"app":               "valheim",
+				"created-by":        deploymentName,
+				"tenant-discord-id": request.DiscordId,
 			},
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
