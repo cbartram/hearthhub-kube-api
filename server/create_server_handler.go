@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 )
 
 const (
@@ -90,7 +91,6 @@ type CreateServerRequest struct {
 
 type ValheimDedicatedServer struct {
 	WorldDetails   CreateServerRequest `json:"world_details"`
-	PodName        string              `json:"pod_name"`
 	PvcName        string              `json:"pvc_name"`
 	DeploymentName string              `json:"deployment_name"`
 	State          string              `json:"state"`
@@ -114,15 +114,6 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, ctx context.Context)
 	}
 
 	// TODO Validate port, modifiers, etc...
-
-	config := MakeServerConfigWithDefaults(reqBody.Name, reqBody.World, reqBody.Port, reqBody.Password, reqBody.EnableCrossplay, reqBody.Public, reqBody.Modifiers)
-	valheimServer, err := CreateDedicatedServerDeployment(config, &reqBody)
-	if err != nil {
-		log.Errorf("could not create dedicated server deployment: %s", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create dedicated server deployment: " + err.Error()})
-		return
-	}
-
 	// Update user info in Cognito with valheim server data.
 	cognito := service.MakeCognitoService()
 	log.Infof("authenticating user with discord id: %s", reqBody.DiscordId)
@@ -130,6 +121,16 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, ctx context.Context)
 	if err != nil {
 		log.Errorf("could not authenticate user with refresh token: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("could not authenticate user with refresh token: %s", err)})
+		return
+	}
+
+	log.Infof("user authenticated: %s", user.Email)
+
+	config := MakeServerConfigWithDefaults(reqBody.Name, reqBody.World, reqBody.Port, reqBody.Password, reqBody.EnableCrossplay, reqBody.Public, reqBody.Modifiers)
+	valheimServer, err := CreateDedicatedServerDeployment(config, &reqBody)
+	if err != nil {
+		log.Errorf("could not create dedicated server deployment: %s", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create dedicated server deployment: " + err.Error()})
 		return
 	}
 
@@ -220,6 +221,7 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, request *Create
 	serverPort, _ := strconv.Atoi(serverConfig.Port)
 	pvcName := fmt.Sprintf("valheim-pvc-%s", serverConfig.InstanceId)
 	deploymentName := fmt.Sprintf("valheim-%s", serverConfig.InstanceId)
+	now := time.Now().Format(time.RFC3339)
 
 	// Create deployment object
 	deployment := &appsv1.Deployment{
@@ -240,7 +242,9 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, request *Create
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"app": "valheim",
+						"app":        "valheim",
+						"created-by": deploymentName,
+						"created-at": now,
 					},
 				},
 				Spec: corev1.PodSpec{
@@ -268,21 +272,37 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, request *Create
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name:      "valheim-data",
+									Name:      "valheim-plugin-data",
 									MountPath: "/valheim/BepInEx/plugins/",
 									SubPath:   "plugins",
+								},
+								{
+									Name:      "valheim-server-data",
+									MountPath: "/root/.config/unity3d/IronGate/Valheim",
+								},
+								{
+									Name:      "irongate",
+									MountPath: "/irongate",
 								},
 							},
 						},
 					},
 					Volumes: []corev1.Volume{
 						{
-							Name: "valheim-data",
+							Name: "valheim-plugin-data",
 							VolumeSource: corev1.VolumeSource{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 									ClaimName: pvcName,
 								},
 							},
+						},
+						{
+							Name:         "valheim-server-data",
+							VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+						},
+						{
+							Name:         "irongate",
+							VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 						},
 					},
 				},
@@ -290,10 +310,19 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, request *Create
 		},
 	}
 
+	// We only need a persistent volume for the plugins that will be installed. Need to shut down server, mount
+	// pvc to a Job, install plugins to pvc, restart server, re-mount pvc
+	// Game files like backups and world files will be (eventually) persisted to s3 by
+	// the sidecar container so EmptyDir{} can be used for those.
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pvcName,
 			Namespace: "hearthhub",
+			Labels: map[string]string{
+				"app":        "valheim",
+				"created-by": deploymentName,
+				"created-at": now,
+			},
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{
@@ -307,7 +336,7 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, request *Create
 		},
 	}
 
-	// Create deployment and PVC in the cluster
+	// Create Deployment and PVC in the cluster
 	pvcCreateResult, err := clientset.CoreV1().PersistentVolumeClaims("hearthhub").Create(context.TODO(), pvc, metav1.CreateOptions{})
 	if err != nil {
 		log.Errorf("Error creating pvc: %v", err)
@@ -318,14 +347,13 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, request *Create
 
 	result, err := clientset.AppsV1().Deployments("hearthhub").Create(context.TODO(), deployment, metav1.CreateOptions{})
 	if err != nil {
-		log.Errorf("Error creating deployment: %v", err)
+		log.Errorf("error creating deployment: %v", err)
 		return nil, err
 	}
 	log.Infof("created deployment %q in namespace %q\n", result.GetObjectMeta().GetName(), result.GetObjectMeta().GetNamespace())
 
 	return &ValheimDedicatedServer{
 		WorldDetails:   *request,
-		PodName:        "",
 		PvcName:        pvcCreateResult.GetName(),
 		DeploymentName: result.GetObjectMeta().GetName(),
 		State:          RUNNING,

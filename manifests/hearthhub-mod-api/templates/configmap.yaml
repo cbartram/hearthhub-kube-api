@@ -7,6 +7,7 @@ data:
   VALHEIM_IMAGE_NAME: "cbartram/hearthhub"
   VALHEIM_IMAGE_VERSION: "0.0.6"
   AWS_REGION: "us-east-1"
+  GIN_MODE: "release"
   CPU_REQUEST: "2"
   MEMORY_REQUEST: "4Gi"
   CPU_LIMIT: "2"
