@@ -62,10 +62,10 @@ type ServerConfig struct {
 	Password              string
 	EnableCrossplay       bool
 	Public                bool
-	SaveIntervalSeconds   int64
+	SaveIntervalSeconds   int
 	BackupCount           int
-	InitialBackupSeconds  int64
-	BackupIntervalSeconds int64
+	InitialBackupSeconds  int
+	BackupIntervalSeconds int
 	InstanceId            string
 	Modifiers             []ServerModifier
 }
@@ -207,11 +207,11 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 		"-instanceid",
 		serverConfig.InstanceId,
 		"-backups",
-		string(rune(serverConfig.BackupCount)),
+		strconv.Itoa(serverConfig.BackupCount),
 		"-backupshort",
-		string(rune(serverConfig.InitialBackupSeconds)),
+		strconv.Itoa(serverConfig.InitialBackupSeconds),
 		"-backuplong",
-		string(rune(serverConfig.BackupIntervalSeconds)),
+		strconv.Itoa(serverConfig.BackupIntervalSeconds),
 	}
 
 	if serverConfig.EnableCrossplay {
@@ -301,8 +301,8 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 						},
 						// Sidecar Backups Container
 						{
-							Name:  "world-backup-sidecar",
-							Image: "cbartram/hearthhub-sidecar:0.0.3",
+							Name:  "backup-manager",
+							Image: "cbartram/hearthhub-sidecar:0.0.4",
 
 							// Ensure this container gets AWS creds so it can upload to S3
 							EnvFrom: []corev1.EnvFromSource{

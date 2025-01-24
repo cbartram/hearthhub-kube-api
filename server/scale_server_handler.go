@@ -16,10 +16,9 @@ import (
 )
 
 type ScaleServerRequest struct {
-	DiscordId      string `json:"discord_id"`
-	DeploymentName string `json:"deployment_name"`
-	RefreshToken   string `json:"refresh_token,omitempty"`
-	Replicas       int32  `json:"replicas"`
+	DiscordId    string `json:"discord_id"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	Replicas     int32  `json:"replicas"`
 }
 
 type ScaleServerHandler struct{}
@@ -39,7 +38,7 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, clientset *kubernetes
 	}
 
 	if reqBody.Replicas > 1 || reqBody.Replicas < 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "replicas must be either 1 or 0: " + err.Error()})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "replicas must be either 1 or 0"})
 		return
 	}
 
@@ -85,7 +84,8 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, clientset *kubernetes
 	}
 
 	// Scale down the deployment
-	scale, err := clientset.AppsV1().Deployments("hearthhub").GetScale(context.TODO(), reqBody.DeploymentName, metav1.GetOptions{})
+	deploymentName := fmt.Sprintf("valheim-%s", reqBody.DiscordId)
+	scale, err := clientset.AppsV1().Deployments("hearthhub").GetScale(context.TODO(), deploymentName, metav1.GetOptions{})
 	if err != nil {
 		// TODO If deployment doesn't exist we are in a bad state and need to set cognito custom:server_details to "nil"
 		log.Errorf("failed to get deployment scale from kubernetes api: %v", err)
@@ -94,7 +94,7 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, clientset *kubernetes
 	}
 
 	scale.Spec.Replicas = reqBody.Replicas
-	_, err = clientset.AppsV1().Deployments("hearthhub").UpdateScale(context.TODO(), reqBody.DeploymentName, scale, metav1.UpdateOptions{})
+	_, err = clientset.AppsV1().Deployments("hearthhub").UpdateScale(context.TODO(), deploymentName, scale, metav1.UpdateOptions{})
 	if err != nil {
 		log.Errorf("failed to update deployment scale: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to update deployment scale: %v", err)})
@@ -115,13 +115,13 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, clientset *kubernetes
 	c.JSON(http.StatusOK, s)
 }
 
-func UpdateServerDetails(ctx context.Context, cognito *service.CognitoService, server *ValheimDedicatedServer, user *service.CognitoUser, state string) (string, error) {
+func UpdateServerDetails(ctx context.Context, cognito *service.CognitoService, server *ValheimDedicatedServer, user *service.CognitoUser, state string) (*ValheimDedicatedServer, error) {
 	server.State = state
 	s, _ := json.Marshal(server)
 	serverAttribute := util.MakeAttribute("custom:server_details", string(s))
 	err := cognito.UpdateUserAttributes(ctx, &user.Credentials.AccessToken, []types.AttributeType{serverAttribute})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return string(s), nil
+	return server, nil
 }
