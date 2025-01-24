@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 	"github.com/cbartram/hearthhub-mod-api/server/service"
 	"github.com/cbartram/hearthhub-mod-api/server/util"
 	"github.com/gin-gonic/gin"
@@ -74,18 +75,19 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, clientset *kubernetes
 	json.Unmarshal([]byte(serverJson), &server)
 
 	if server.State == RUNNING && reqBody.Replicas == 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "replicas must be 0 when server state is: RUNNING"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "server already running. replicas must be 0 when server state is: RUNNING"})
 		return
 	}
 
 	if server.State == TERMINATED && reqBody.Replicas == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "replicas must be 1 when server state is: TERMINATED"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no server to terminate. replicas must be 1 when server state is: TERMINATED"})
 		return
 	}
 
 	// Scale down the deployment
 	scale, err := clientset.AppsV1().Deployments("hearthhub").GetScale(context.TODO(), reqBody.DeploymentName, metav1.GetOptions{})
 	if err != nil {
+		// TODO If deployment doesn't exist we are in a bad state and need to set cognito custom:server_details to "nil"
 		log.Errorf("failed to get deployment scale from kubernetes api: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get deployment scale from kubernetes api: %v", err)})
 		return
@@ -99,4 +101,27 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, clientset *kubernetes
 		return
 	}
 
+	state := TERMINATED
+	if reqBody.Replicas == 1 {
+		state = RUNNING
+	}
+	s, err := UpdateServerDetails(ctx, cognito, &server, user, state)
+	if err != nil {
+		log.Errorf("could not update user attributes: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("could not update user attributes: %s", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, s)
+}
+
+func UpdateServerDetails(ctx context.Context, cognito *service.CognitoService, server *ValheimDedicatedServer, user *service.CognitoUser, state string) (string, error) {
+	server.State = state
+	s, _ := json.Marshal(server)
+	serverAttribute := util.MakeAttribute("custom:server_details", string(s))
+	err := cognito.UpdateUserAttributes(ctx, &user.Credentials.AccessToken, []types.AttributeType{serverAttribute})
+	if err != nil {
+		return "", err
+	}
+	return string(s), nil
 }

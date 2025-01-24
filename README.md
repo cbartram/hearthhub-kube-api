@@ -80,6 +80,36 @@ This ensures that requests can be correctly proxied to the cluster from the loca
 
 Check the API is running with: `curl http://hearthhub-api.example/api/v1/health` You should see: `{"status": "OK"}`
 
+
+### Running Locally
+
+You can run this API locally but will need to create a `.env` file in the root of the project. The `.env` file should
+have the following env vars set:
+
+```shell
+# CPU & Mem requests and limits for the dedicated server that will be created
+CPU_REQUEST=1
+CPU_LIMIT=1
+MEMORY_REQUEST=4Gi
+MEMORY_LIMIT=4Gi
+
+# Valheim image conf
+VALHEIM_IMAGE_NAME=<YOUR VALHEIM SERVER IMAGE built from Dockerfile in this repo>
+VALHEIM_IMAGE_VERSION=<YOUR VALHEIM Server image version i.e. 0.0.1>
+
+# Cognito Conf
+COGNITO_CLIENT_ID=<YOUR_COGNITO_CLIENT_ID>
+COGNITO_CLIENT_SECRET=<YOUR_COGNITO_SECRET>
+USER_POOL_ID=<YOUR_USER_POOL_ID>
+
+# AWS SDK conf
+AWS_SECRET_ACCESS_KEY=<YOUR_AWS_SECRET_KEY>
+AWS_ACCESS_KEY_ID=<YOUR_AWS_ACCESS_KEY>
+AWS_REGION=us-east-1
+```
+
+Build the API with `go build -o main .` and run with `./main` The API will be running on: `http://localhost:8080`
+
 ## Built With
 
 - [Kubernetes](https://kubernetes.io) - Container orchestration platform

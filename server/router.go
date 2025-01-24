@@ -6,6 +6,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"log"
 	"net/http"
 	"os"
@@ -47,7 +48,12 @@ func NewRouter(ctx context.Context) *gin.Engine {
 
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Fatalf("could not create in cluster config: %v", err.Error())
+		log.Printf("could not create in cluster config. Attempting to load local kube config: %v", err.Error())
+		config, err = clientcmd.BuildConfigFromFlags("", clientcmd.RecommendedHomeFile)
+		if err != nil {
+			log.Fatalf("could not load local kubernetes config: %v", err.Error())
+		}
+		log.Printf("local kube config loaded successfully")
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)

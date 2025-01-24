@@ -15,7 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"net/http"
 	"os"
 	"strconv"
@@ -148,7 +147,7 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, clientset *kubernete
 	}
 
 	config := MakeServerConfigWithDefaults(reqBody.Name, reqBody.World, reqBody.Port, reqBody.Password, reqBody.EnableCrossplay, reqBody.Public, reqBody.Modifiers)
-	valheimServer, err := CreateDedicatedServerDeployment(config, &reqBody)
+	valheimServer, err := CreateDedicatedServerDeployment(config, clientset, &reqBody)
 	if err != nil {
 		log.Errorf("could not create dedicated server deployment: %s", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create dedicated server deployment: " + err.Error()})
@@ -303,8 +302,26 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 						// Sidecar Backups Container
 						{
 							Name:  "world-backup-sidecar",
-							Image: "cbartram/hearthhub-sidecar:0.0.1",
-							Args:  serverArgs,
+							Image: "cbartram/hearthhub-sidecar:0.0.3",
+
+							// Ensure this container gets AWS creds so it can upload to S3
+							EnvFrom: []corev1.EnvFromSource{
+								{
+									SecretRef: &corev1.SecretEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "aws-creds",
+										},
+									},
+								},
+								// AWS_REGION and BACKUP_FREQ env vars are part of this CM which are also required
+								{
+									ConfigMapRef: &corev1.ConfigMapEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "server-resource-config",
+										},
+									},
+								},
+							},
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      "valheim-plugin-data",
@@ -357,7 +374,7 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{
-				corev1.ReadWriteOnce,
+				corev1.ReadWriteMany,
 			},
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
