@@ -97,8 +97,11 @@ type ValheimDedicatedServer struct {
 
 type CreateServerHandler struct{}
 
-// HandleRequest Handles the /api/v1/server/create to create a new Valheim dedicated server container.
-func (h *CreateServerHandler) HandleRequest(c *gin.Context, ctx context.Context) {
+// HandleRequest Handles the /api/v1/server/create to create a new Valheim dedicated server container. This route is
+// responsible for creating the initial deployment and pvc which in turn creates the replicaset and pod for the server.
+// Future server management like mod installation, user termination requests, custom world uploads, etc... will use
+// the /api/v1/server/scale route to scale the replicas to 0-1 without removing the deployment or PVC.
+func (h *CreateServerHandler) HandleRequest(c *gin.Context, clientset *kubernetes.Clientset, ctx context.Context) {
 	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
@@ -124,6 +127,25 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, ctx context.Context)
 	}
 
 	log.Infof("user authenticated: %s", user.Email)
+
+	// Verify that server details is "nil". This avoids a scenario where a
+	// user could create more than 1 server.
+	attributes, err := cognito.GetUserAttributes(ctx, &user.Credentials.AccessToken)
+	serverDetails := util.GetAttribute(attributes, "custom:server_details")
+	tmpServer := ValheimDedicatedServer{}
+	log.Infof("user attributes: %v", serverDetails)
+	if err != nil {
+		log.Errorf("could not get user attributes: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("could not get user attributes: %s", err)})
+		return
+	}
+
+	// If server is nil it's the first time the user is booting up.
+	if serverDetails != "nil" {
+		json.Unmarshal([]byte(serverDetails), &tmpServer)
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("server: %s already exists for user: %s. use PUT /api/v1/server/scale to manage replicas.", tmpServer.DeploymentName, user.Email)})
+		return
+	}
 
 	config := MakeServerConfigWithDefaults(reqBody.Name, reqBody.World, reqBody.Port, reqBody.Password, reqBody.EnableCrossplay, reqBody.Public, reqBody.Modifiers)
 	valheimServer, err := CreateDedicatedServerDeployment(config, &reqBody)
@@ -170,19 +192,9 @@ func MakeServerConfigWithDefaults(name, world, port, password string, crossplay 
 }
 
 // CreateDedicatedServerDeployment Creates the valheim dedicated server deployment and pvc given the server configuration.
-func CreateDedicatedServerDeployment(serverConfig *ServerConfig, request *CreateServerRequest) (*ValheimDedicatedServer, error) {
+func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kubernetes.Clientset, request *CreateServerRequest) (*ValheimDedicatedServer, error) {
 	// Ensures the refresh token doesn't get echo'd in the response
 	request.RefreshToken = ""
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		log.Fatalf("could not create in cluster config: %v", err.Error())
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		log.Fatalf("Error creating kubernetes client: %v", err)
-	}
-
 	serverArgs := []string{
 		"./valheim_server.x86_64",
 		"-name",
@@ -218,8 +230,11 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, request *Create
 	}
 
 	serverPort, _ := strconv.Atoi(serverConfig.Port)
-	pvcName := fmt.Sprintf("valheim-pvc-%s", serverConfig.InstanceId)
-	deploymentName := fmt.Sprintf("valheim-%s", serverConfig.InstanceId)
+
+	// Deployments & PVC are always tied to the discord ID. When a server is terminated and re-created it
+	// will be made with a different pod name but the same deployment name making for easy replica scaling.
+	pvcName := fmt.Sprintf("valheim-pvc-%s", request.DiscordId)
+	deploymentName := fmt.Sprintf("valheim-%s", request.DiscordId)
 
 	// Create deployment object
 	deployment := &appsv1.Deployment{

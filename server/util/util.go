@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 	"math/rand"
 	"time"
@@ -35,6 +36,17 @@ func MakeAttribute(key, value string) types.AttributeType {
 		Value: &value,
 	}
 	return attr
+}
+
+// GetUserAttribute Returns the string value for a given attribute name from Cognito.
+func GetAttribute(attributes []types.AttributeType, attributeName string) string {
+	for _, attribute := range attributes {
+		if aws.ToString(attribute.Name) == attributeName {
+			return aws.ToString(attribute.Value)
+		}
+	}
+
+	return ""
 }
 
 // MakeCognitoSecretHash Creates a hash based on the user id, service id and secret which must be

@@ -4,6 +4,8 @@ import (
 	"context"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"log"
 	"net/http"
 	"os"
@@ -43,6 +45,16 @@ func NewRouter(ctx context.Context) *gin.Engine {
 
 	r.Use(LogrusMiddleware(logger))
 
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		log.Fatalf("could not create in cluster config: %v", err.Error())
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		log.Fatalf("Error creating kubernetes client: %v", err)
+	}
+
 	apiGroup := r.Group("/api/v1")
 	serverGroup := apiGroup.Group("/server")
 
@@ -54,7 +66,12 @@ func NewRouter(ctx context.Context) *gin.Engine {
 
 	serverGroup.POST("/create", func(c *gin.Context) {
 		handler := CreateServerHandler{}
-		handler.HandleRequest(c, ctx)
+		handler.HandleRequest(c, clientset, ctx)
+	})
+
+	serverGroup.PUT("/scale", func(c *gin.Context) {
+		handler := ScaleServerHandler{}
+		handler.HandleRequest(c, clientset, ctx)
 	})
 
 	logger.Infof("Server listening on port: 8080")
