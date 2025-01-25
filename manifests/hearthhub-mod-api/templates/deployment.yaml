@@ -21,8 +21,9 @@ spec:
           image: {{.Values.image.repository}}:{{.Values.image.tag}}
           imagePullPolicy: IfNotPresent
           args:
+            - "./main"
             - "-port"
-            - {{ .Values.service.targetPort | quote }}
+            - {{.Values.service.targetPort | quote }}
           envFrom:
             - secretRef:
                 name: cognito-secrets

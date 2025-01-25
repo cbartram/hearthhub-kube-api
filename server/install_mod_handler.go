@@ -66,8 +66,9 @@ func CreateModInstallJob(clientset *kubernetes.Clientset, payload *InstallModPay
 					Containers: []corev1.Container{
 						{
 							Name:  "main",
-							Image: "cbartram/hearthhub-plugin-manager:0.0.1",
+							Image: "cbartram/hearthhub-plugin-manager:0.0.3",
 							Args: []string{
+								"./plugin-manager",
 								"-discord_id",
 								payload.DiscordId,
 								"-refresh_token",
@@ -96,7 +97,7 @@ func CreateModInstallJob(clientset *kubernetes.Clientset, payload *InstallModPay
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name:      "plugins-volume",
+									Name:      "valheim-pvc",
 									MountPath: "/valheim/BepInEx/plugins/",
 									SubPath:   "plugins",
 								},
