@@ -37,6 +37,30 @@ file to match your built image.
 
 Run the `./scripts/build_api.sh` to do the same for the API image.
 
+## Networking
+
+This application was built and tested on [MiniKube](https://minikube.sigs.k8s.io). Minikube uses (usually) a Docker VM to run MiniKube which has its own network separate
+from your host machine. By running `minikube tunnel` it will forward services from your [MiniKube](https://minikube.sigs.k8s.io) network to your host network and **ONLY** 
+your host network.
+
+What this means is that if you have a service like this:
+
+```shell
+NAME                TYPE           CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+hearthhub-mod-api   LoadBalancer   10.99.134.178   127.0.0.1     8080:30616/TCP   9m41s
+```
+
+Then:
+
+`curl http://localhost:8080/api/v1/health` will resolve. However, port forwarding your router and going to: `http://<your-ip>:8080/api/v1/health` will
+not resolve. It is only available on your host machine. Great for testing, not great for exposing your service to the internet. You can further verify this
+by opening up and forwarding port `8081` on your router and starting a Python http server.
+
+`python3 -m http.server 8081`
+
+Going to [CanYouSeeMe.org](https://canyouseeme.org/) for port `8081` will show successful while port `8080` will show nothing even though both are port forwarded
+and HTTP server's are running on both ports.
+
 ## Deployment
 
 ### Kubernetes Setup 

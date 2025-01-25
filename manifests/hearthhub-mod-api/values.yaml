@@ -11,7 +11,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 service:
-  type: NodePort
+  type: LoadBalancer
   port: 8080
   targetPort: 8080
   nodePort: 32426
@@ -21,7 +21,7 @@ ingress:
   className: nginx
   serviceName: hearthhub-mod-api
   port: 8080
-  host: hearthhub-api.example
+  host: hearthhub-api.ai
 
 resources:
    limits:
