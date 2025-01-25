@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/cbartram/hearthhub-mod-api/server"
 	"github.com/joho/godotenv"
 	"log"
@@ -15,7 +16,7 @@ func main() {
 	if ginMode == "" {
 		err := godotenv.Load()
 		if err != nil {
-			log.Fatalf("Error loading .env file")
+			log.Fatalf(fmt.Sprintf("error loading .env file: %v", err))
 		}
 	}
 

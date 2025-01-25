@@ -61,6 +61,29 @@ by opening up and forwarding port `8081` on your router and starting a Python ht
 Going to [CanYouSeeMe.org](https://canyouseeme.org/) for port `8081` will show successful while port `8080` will show nothing even though both are port forwarded
 and HTTP server's are running on both ports.
 
+The solution: [Tinyproxy](https://tinyproxy.github.io/)
+
+Install tinyproxy with `sudo apt install tinyproxy`
+
+Apply the following configurations to `/etc/tinyproxy/tinyproxy.conf`
+
+- `Port 8081`
+- Comment out all "Allow" statements (effectively allow all)
+- `Upstream http 127.0.0.1:8080` (assumes hearthhub-api service's external IP is 127.0.0.1 and its port is 8080)
+
+Now tiny proxy is setup on the host machine to proxy traffic from all external sources to the `minikube tunnel` which is forwarding
+the Hearthhub Mod API service.
+
+```mermaid
+flowchart LR
+    A[Client Machine] -->|HTTP/HTTPS Request| B[Router\nPort Forwarding:\n80 → 8081\n443 → 8081]
+    B -->|Forward to Port 8081| C[TinyProxy\nListening on Port 8081]
+    C -->|Proxy Request| D[Minikube Tunnel]
+    D -->|Route to DockerVM| E[DockerVM]
+    E -->|Forward to Service| F[Kubernetes Service]
+    F -->|Route to Pod| G[HearthHub API\nPort 8080]
+```
+
 ## Deployment
 
 ### Kubernetes Setup 
@@ -73,10 +96,18 @@ Create the `hearthhub` namespace on your cluster with: `kubectl create ns hearth
 Since the API makes updates to custom AWS Cognito user attributes, make sure to enter the AWS Cognito related secrets for running the API:
 
 ```shell
- kubectl create secret generic app-secrets \
+# Cognito Secrets
+ kubectl create secret generic cognito-secrets \
    --from-literal=USER_POOL_ID=us-east-1_example \
    --from-literal=COGNITO_CLIENT_ID=abc123example \
-   --from-literal=COGNITO_CLIENT_SECRET=supersecretvalue
+   --from-literal=COGNITO_CLIENT_SECRET=supersecretvalue \
+   -n hearthhub
+
+# AWS Secrets
+ kubectl create secret generic aws-creds \
+ --from-literal=AWS_ACCESS_KEY_ID=<KEY> \
+ --from-literal=AWS_SECRET_ACCESS_KEY=<SECRET> \
+ -n hearthhub
 ```
 
 Finally, you should update your `/etc/hosts/` file with the DNS entry for your API:
