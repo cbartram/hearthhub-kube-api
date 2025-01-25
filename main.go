@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"github.com/cbartram/hearthhub-mod-api/server"
 	"github.com/joho/godotenv"
@@ -12,6 +13,9 @@ import (
 func main() {
 	ginMode := os.Getenv("GIN_MODE")
 
+	port := flag.String("port", "8080", "port to listen on")
+	flag.Parse()
+
 	// Running locally
 	if ginMode == "" {
 		err := godotenv.Load()
@@ -20,8 +24,9 @@ func main() {
 		}
 	}
 
-	err := server.NewRouter(context.Background()).Run(":8080")
+	err := server.NewRouter(context.Background()).Run(fmt.Sprintf(":%v", *port))
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Printf("Server Listening on port %s", *port)
 }

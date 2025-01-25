@@ -20,6 +20,9 @@ spec:
         - name: hearthhub-mod-api
           image: {{.Values.image.repository}}:{{.Values.image.tag}}
           imagePullPolicy: IfNotPresent
+          args:
+            - "-port"
+            - {{ .Values.service.targetPort | quote }}
           envFrom:
             - secretRef:
                 name: cognito-secrets

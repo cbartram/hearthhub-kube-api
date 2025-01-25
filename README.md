@@ -13,9 +13,10 @@ The diagram below represents the general architecture for this repository.
 
 ```mermaid
 flowchart TD
-    A[API Request] -->|POST /plugins| B[API Server]
+    A[API Request] -->|POST /api/v1/server/create| B[API Server]
     B -->|Create Job| D[Plugin Manager Service]
-    D -->|Download Plugin| E[Plugin Storage]
+    B -->|Kubernetes Deploy Create| G[Valheim Server Pod]
+    D -->|Download Plugin| E[Plugin Storage S3]
     D -->|Extract to Volume| F[Shared Volume]
     G[Valheim Server Pod] -->|Mount| F
     
@@ -82,6 +83,20 @@ flowchart LR
     D -->|Route to DockerVM| E[DockerVM]
     E -->|Forward to Service| F[Kubernetes Service]
     F -->|Route to Pod| G[HearthHub API\nPort 8080]
+```
+
+### TLDR
+
+```shell
+minikube start --driver=docker
+
+# In a new window
+minikube tunnel
+
+sudo systemctl start tinyproxy
+
+# Test tinyproxy -> minikube -> service -> pod
+curl http://127.0.0.1:8081/api/v1/health
 ```
 
 ## Deployment

@@ -80,6 +80,5 @@ func NewRouter(ctx context.Context) *gin.Engine {
 		handler.HandleRequest(c, clientset, ctx)
 	})
 
-	logger.Infof("Server listening on port: 8080")
 	return r
 }
