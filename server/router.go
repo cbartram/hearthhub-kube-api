@@ -63,7 +63,7 @@ func NewRouter(ctx context.Context) *gin.Engine {
 
 	apiGroup := r.Group("/api/v1")
 	serverGroup := apiGroup.Group("/server")
-	modGroup := apiGroup.Group("/mod")
+	modGroup := apiGroup.Group("/file")
 
 	apiGroup.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -72,7 +72,7 @@ func NewRouter(ctx context.Context) *gin.Engine {
 	})
 
 	modGroup.POST("/install", func(c *gin.Context) {
-		handler := InstallModHandler{}
+		handler := InstallFileHandler{}
 		handler.HandleRequest(c, clientset, ctx)
 	})
 

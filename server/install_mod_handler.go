@@ -16,16 +16,17 @@ import (
 	"strconv"
 )
 
-type InstallModPayload struct {
+type InstallFilePayload struct {
 	DiscordId    string `json:"discord_id"`
 	RefreshToken string `json:"refresh_token"`
-	ModName      string `json:"mod_name"`
-	PersonalMod  bool   `json:"personal_mod"`
+	Prefix       string `json:"prefix"`
+	Destination  string `json:"destination"`
+	IsArchive    bool   `json:"is_archive"`
 }
 
-type InstallModHandler struct{}
+type InstallFileHandler struct{}
 
-func (h *InstallModHandler) HandleRequest(c *gin.Context, clientset *kubernetes.Clientset, ctx context.Context) {
+func (h *InstallFileHandler) HandleRequest(c *gin.Context, clientset *kubernetes.Clientset, ctx context.Context) {
 	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
@@ -33,13 +34,13 @@ func (h *InstallModHandler) HandleRequest(c *gin.Context, clientset *kubernetes.
 		return
 	}
 
-	var reqBody InstallModPayload
+	var reqBody InstallFilePayload
 	if err := json.Unmarshal(bodyRaw, &reqBody); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
 		return
 	}
 
-	name, err := CreateModInstallJob(clientset, &reqBody)
+	name, err := CreateFileInstallJob(clientset, &reqBody)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("could not create mod install job: %v", err)})
 		return
@@ -48,15 +49,15 @@ func (h *InstallModHandler) HandleRequest(c *gin.Context, clientset *kubernetes.
 	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("mod install job created: %s", *name)})
 }
 
-// CreateModInstallJob Creates a new kubernetes job which attaches the valheim server PVC, downloads mods from S3,
+// CreateFileInstallJob Creates a new kubernetes job which attaches the valheim server PVC, downloads mods from S3,
 // and installs mods onto the PVC before restarting the Valheim server.
-func CreateModInstallJob(clientset *kubernetes.Clientset, payload *InstallModPayload) (*string, error) {
+func CreateFileInstallJob(clientset *kubernetes.Clientset, payload *InstallFilePayload) (*string, error) {
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: fmt.Sprintf("mod-install-%s-", payload.DiscordId),
 			Labels: map[string]string{
 				"tenant-discord-id": payload.DiscordId,
-				"mod-name":          payload.ModName,
+				"file-name":         payload.Prefix,
 			},
 			Namespace: "hearthhub",
 		},
@@ -66,17 +67,19 @@ func CreateModInstallJob(clientset *kubernetes.Clientset, payload *InstallModPay
 					Containers: []corev1.Container{
 						{
 							Name:  "main",
-							Image: "cbartram/hearthhub-plugin-manager:0.0.3",
+							Image: "cbartram/hearthhub-plugin-manager:0.0.4",
 							Args: []string{
 								"./plugin-manager",
 								"-discord_id",
 								payload.DiscordId,
 								"-refresh_token",
 								payload.RefreshToken,
-								"-mod_name",
-								payload.ModName,
-								"-personal_mod",
-								strconv.FormatBool(payload.PersonalMod),
+								"-prefix",
+								payload.Prefix,
+								"-destination",
+								payload.Destination,
+								"-archive",
+								strconv.FormatBool(payload.IsArchive),
 							},
 							ImagePullPolicy: corev1.PullIfNotPresent,
 							EnvFrom: []corev1.EnvFromSource{
@@ -101,6 +104,10 @@ func CreateModInstallJob(clientset *kubernetes.Clientset, payload *InstallModPay
 									MountPath: "/valheim/BepInEx/plugins/",
 									SubPath:   "plugins",
 								},
+								{
+									Name:      "valheim-world-pvc",
+									MountPath: "/root/.config/unity3d/IronGate/Valheim",
+								},
 							},
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
@@ -121,6 +128,14 @@ func CreateModInstallJob(clientset *kubernetes.Clientset, payload *InstallModPay
 							VolumeSource: corev1.VolumeSource{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 									ClaimName: fmt.Sprintf("valheim-pvc-%s", payload.DiscordId),
+								},
+							},
+						},
+						{
+							Name: "valheim-world-pvc",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: fmt.Sprintf("valheim-world-pvc-%s", payload.DiscordId),
 								},
 							},
 						},

@@ -89,7 +89,8 @@ type CreateServerRequest struct {
 
 type ValheimDedicatedServer struct {
 	WorldDetails   CreateServerRequest `json:"world_details"`
-	PvcName        string              `json:"pvc_name"`
+	ModPvcName     string              `json:"mod_pvc_name"`
+	WorldPvcName   string              `json:"world_pvc_name"`
 	DeploymentName string              `json:"deployment_name"`
 	State          string              `json:"state"`
 }
@@ -233,8 +234,11 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 	// Deployments & PVC are always tied to the discord ID. When a server is terminated and re-created it
 	// will be made with a different pod name but the same deployment name making for easy replica scaling.
 	pvcName := fmt.Sprintf("valheim-pvc-%s", request.DiscordId)
+	worldPvcName := fmt.Sprintf("valheim-world-pvc-%s", request.DiscordId)
 	deploymentName := fmt.Sprintf("valheim-%s", request.DiscordId)
 
+	log.Infof("server args: %v", serverArgs)
+	log.Infof("creating k8s objects: mod-pvc: %s, world-pvc: %s, deployment: %s", pvcName, worldPvcName, deploymentName)
 	// Create deployment object
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -337,6 +341,7 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 					},
 					Volumes: []corev1.Volume{
 						{
+							// PVC which holds mod information (used by the plugin-manager to install new mods)
 							Name: "valheim-plugin-data",
 							VolumeSource: corev1.VolumeSource{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
@@ -345,10 +350,16 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 							},
 						},
 						{
-							Name:         "valheim-server-data",
-							VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+							// PVC which holds world save information (used by the plugin-manager to upload custom worlds to a new server)
+							Name: "valheim-server-data",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: worldPvcName,
+								},
+							},
 						},
 						{
+							// Unknown: this was included in the docker_start_server.sh file from Irongate. Unsure of how its used.
 							Name:         "irongate",
 							VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 						},
@@ -362,7 +373,8 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 	// pvc to a Job, install plugins to pvc, restart server, re-mount pvc
 	// Game files like backups and world files will be (eventually) persisted to s3 by
 	// the sidecar container so EmptyDir{} can be used for those.
-	pvc := &corev1.PersistentVolumeClaim{
+	var pvcs []*corev1.PersistentVolumeClaim
+	modPvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pvcName,
 			Namespace: "hearthhub",
@@ -384,25 +396,54 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 		},
 	}
 
-	// Create Deployment and PVC in the cluster
-	pvcCreateResult, err := clientset.CoreV1().PersistentVolumeClaims("hearthhub").Create(context.TODO(), pvc, metav1.CreateOptions{})
-	if err != nil {
-		log.Errorf("Error creating pvc: %v", err)
-		return nil, err
+	worldPvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pvcName,
+			Namespace: "hearthhub",
+			Labels: map[string]string{
+				"app":               "valheim",
+				"created-by":        deploymentName,
+				"tenant-discord-id": request.DiscordId,
+			},
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteMany,
+			},
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse("1Gi"),
+				},
+			},
+		},
 	}
 
-	log.Infof("created PVC: %s", pvcCreateResult.Name)
+	pvcs = append(pvcs, modPvc, worldPvc)
+	pvcNames := make([]string, len(pvcs))
+
+	// Create Deployment and PVC's in the cluster
+	for _, pvc := range pvcs {
+		pvcCreateResult, err := clientset.CoreV1().PersistentVolumeClaims("hearthhub").Create(context.TODO(), pvc, metav1.CreateOptions{})
+		if err != nil {
+			log.Errorf("Error creating pvc: %v", err)
+			return nil, err
+		}
+
+		log.Infof("created PVC: %s", pvcCreateResult.Name)
+		pvcNames = append(pvcNames, pvcCreateResult.Name)
+	}
 
 	result, err := clientset.AppsV1().Deployments("hearthhub").Create(context.TODO(), deployment, metav1.CreateOptions{})
 	if err != nil {
 		log.Errorf("error creating deployment: %v", err)
 		return nil, err
 	}
-	log.Infof("created deployment %q in namespace %q\n", result.GetObjectMeta().GetName(), result.GetObjectMeta().GetNamespace())
+	log.Infof("created deployment %q in namespace %q", result.GetObjectMeta().GetName(), result.GetObjectMeta().GetNamespace())
 
 	return &ValheimDedicatedServer{
 		WorldDetails:   *request,
-		PvcName:        pvcCreateResult.GetName(),
+		ModPvcName:     pvcNames[0],
+		WorldPvcName:   pvcNames[1],
 		DeploymentName: result.GetObjectMeta().GetName(),
 		State:          RUNNING,
 	}, nil
