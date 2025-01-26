@@ -13,7 +13,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"net/http"
+	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 type InstallFilePayload struct {
@@ -52,12 +54,14 @@ func (h *InstallFileHandler) HandleRequest(c *gin.Context, clientset *kubernetes
 // CreateFileInstallJob Creates a new kubernetes job which attaches the valheim server PVC, downloads mods from S3,
 // and installs mods onto the PVC before restarting the Valheim server.
 func CreateFileInstallJob(clientset *kubernetes.Clientset, payload *InstallFilePayload) (*string, error) {
+	fileName := filepath.Base(payload.Prefix)
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: fmt.Sprintf("mod-install-%s-", payload.DiscordId),
 			Labels: map[string]string{
 				"tenant-discord-id": payload.DiscordId,
-				"file-name":         payload.Prefix,
+				"file-name":         fileName,
+				"destination":       strings.ReplaceAll(payload.Destination, "/", "-"),
 			},
 			Namespace: "hearthhub",
 		},

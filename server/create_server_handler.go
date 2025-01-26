@@ -398,7 +398,7 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 
 	worldPvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pvcName,
+			Name:      worldPvcName,
 			Namespace: "hearthhub",
 			Labels: map[string]string{
 				"app":               "valheim",
