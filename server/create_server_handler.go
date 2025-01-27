@@ -79,7 +79,6 @@ type CreateServerRequest struct {
 	DiscordId       string           `json:"discord_id"`
 	RefreshToken    string           `json:"refresh_token,omitempty"`
 	Name            string           `json:"name"`
-	Port            string           `json:"port"`
 	World           string           `json:"world"`
 	Password        string           `json:"password"`
 	EnableCrossplay bool             `json:"enable_crossplay"`
@@ -89,8 +88,7 @@ type CreateServerRequest struct {
 
 type ValheimDedicatedServer struct {
 	WorldDetails   CreateServerRequest `json:"world_details"`
-	ModPvcName     string              `json:"mod_pvc_name"`
-	WorldPvcName   string              `json:"world_pvc_name"`
+	PvcName        string              `json:"mod_pvc_name"`
 	DeploymentName string              `json:"deployment_name"`
 	State          string              `json:"state"`
 }
@@ -147,7 +145,7 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, clientset *kubernete
 		return
 	}
 
-	config := MakeServerConfigWithDefaults(reqBody.Name, reqBody.World, reqBody.Port, reqBody.Password, reqBody.EnableCrossplay, reqBody.Public, reqBody.Modifiers)
+	config := MakeServerConfigWithDefaults(reqBody.Name, reqBody.World, reqBody.Password, reqBody.EnableCrossplay, reqBody.Public, reqBody.Modifiers)
 	valheimServer, err := CreateDedicatedServerDeployment(config, clientset, &reqBody)
 	if err != nil {
 		log.Errorf("could not create dedicated server deployment: %s", err)
@@ -173,12 +171,11 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, clientset *kubernete
 	c.JSON(http.StatusOK, valheimServer)
 }
 
-func MakeServerConfigWithDefaults(name, world, port, password string, crossplay bool, public bool, modifiers []ServerModifier) *ServerConfig {
-	// 2456 default port
+func MakeServerConfigWithDefaults(name, world, password string, crossplay bool, public bool, modifiers []ServerModifier) *ServerConfig {
 	return &ServerConfig{
 		Name:                  name,
-		Port:                  port,
 		World:                 world,
+		Port:                  "2456",
 		Password:              password,
 		EnableCrossplay:       crossplay,
 		Public:                public,
@@ -266,7 +263,6 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 				Spec: corev1.PodSpec{
 					ServiceAccountName: "hearthhub-api-sa",
 					Containers: []corev1.Container{
-						// Main dedicated server container
 						{
 							Name:  "valheim",
 							Image: fmt.Sprintf("%s:%s", os.Getenv("VALHEIM_IMAGE_NAME"), os.Getenv("VALHEIM_IMAGE_VERSION")),
@@ -287,23 +283,8 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 									corev1.ResourceMemory: resource.MustParse(os.Getenv("MEMORY_REQUEST")),
 								},
 							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "valheim-plugin-data",
-									MountPath: "/valheim/BepInEx/plugins/",
-									SubPath:   "plugins",
-								},
-								{
-									Name:      "valheim-server-data",
-									MountPath: "/root/.config/unity3d/IronGate/Valheim",
-								},
-								{
-									Name:      "irongate",
-									MountPath: "/irongate",
-								},
-							},
+							VolumeMounts: MakeVolumeMounts(),
 						},
-						// Sidecar Backups Container
 						{
 							Name:  "backup-manager",
 							Image: "cbartram/hearthhub-sidecar:0.0.4",
@@ -326,35 +307,16 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 									},
 								},
 							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "valheim-plugin-data",
-									MountPath: "/valheim/BepInEx/plugins/",
-									SubPath:   "plugins",
-								},
-								{
-									Name:      "valheim-server-data",
-									MountPath: "/root/.config/unity3d/IronGate/Valheim",
-								},
-							},
+							VolumeMounts: MakeVolumeMounts(),
 						},
 					},
 					Volumes: []corev1.Volume{
 						{
 							// PVC which holds mod information (used by the plugin-manager to install new mods)
-							Name: "valheim-plugin-data",
+							Name: "valheim-data",
 							VolumeSource: corev1.VolumeSource{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 									ClaimName: pvcName,
-								},
-							},
-						},
-						{
-							// PVC which holds world save information (used by the plugin-manager to upload custom worlds to a new server)
-							Name: "valheim-server-data",
-							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-									ClaimName: worldPvcName,
 								},
 							},
 						},
@@ -373,8 +335,7 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 	// pvc to a Job, install plugins to pvc, restart server, re-mount pvc
 	// Game files like backups and world files will be (eventually) persisted to s3 by
 	// the sidecar container so EmptyDir{} can be used for those.
-	var pvcs []*corev1.PersistentVolumeClaim
-	modPvc := &corev1.PersistentVolumeClaim{
+	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pvcName,
 			Namespace: "hearthhub",
@@ -396,42 +357,14 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 		},
 	}
 
-	worldPvc := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      worldPvcName,
-			Namespace: "hearthhub",
-			Labels: map[string]string{
-				"app":               "valheim",
-				"created-by":        deploymentName,
-				"tenant-discord-id": request.DiscordId,
-			},
-		},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes: []corev1.PersistentVolumeAccessMode{
-				corev1.ReadWriteOnce,
-			},
-			Resources: corev1.VolumeResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse("1Gi"),
-				},
-			},
-		},
+	// Create Deployment and PVC in the cluster
+	pvcCreateResult, err := clientset.CoreV1().PersistentVolumeClaims("hearthhub").Create(context.TODO(), pvc, metav1.CreateOptions{})
+	if err != nil {
+		log.Errorf("Error creating pvc: %v", err)
+		return nil, err
 	}
 
-	pvcs = append(pvcs, modPvc, worldPvc)
-	pvcNames := make([]string, len(pvcs))
-
-	// Create Deployment and PVC's in the cluster
-	for _, pvc := range pvcs {
-		pvcCreateResult, err := clientset.CoreV1().PersistentVolumeClaims("hearthhub").Create(context.TODO(), pvc, metav1.CreateOptions{})
-		if err != nil {
-			log.Errorf("Error creating pvc: %v", err)
-			return nil, err
-		}
-
-		log.Infof("created PVC: %s", pvcCreateResult.Name)
-		pvcNames = append(pvcNames, pvcCreateResult.Name)
-	}
+	log.Infof("created PVC: %s", pvcCreateResult.Name)
 
 	result, err := clientset.AppsV1().Deployments("hearthhub").Create(context.TODO(), deployment, metav1.CreateOptions{})
 	if err != nil {
@@ -442,9 +375,32 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 
 	return &ValheimDedicatedServer{
 		WorldDetails:   *request,
-		ModPvcName:     pvcNames[0],
-		WorldPvcName:   pvcNames[1],
+		PvcName:        pvcCreateResult.GetObjectMeta().GetName(),
 		DeploymentName: result.GetObjectMeta().GetName(),
 		State:          RUNNING,
 	}, nil
+}
+
+func MakeVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		{
+			Name:      "valheim-data",
+			MountPath: "/valheim/BepInEx/plugins",
+			SubPath:   "plugins",
+		},
+		{
+			Name:      "valheim-data",
+			MountPath: "/valheim/BepInEx/config",
+			SubPath:   "config",
+		},
+		{
+			Name:      "valheim-data",
+			MountPath: "/root/.config/unity3d/IronGate/Valheim/worlds_local",
+			SubPath:   "worlds_local",
+		},
+		{
+			Name:      "irongate",
+			MountPath: "/irongate",
+		},
+	}
 }
