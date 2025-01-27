@@ -38,10 +38,117 @@ file to match your built image.
 
 Run the `./scripts/build_api.sh` to do the same for the API image.
 
+## Kubernetes Setup 
+
+### K3s
+
+[K3's](https://docs.k3s.io) is the preferred deployment option because:
+- You can skip the entire [Networking](#networking) section and omit the `tinyproxy` server since it runs natively on the host
+- You can add additional nodes to the cluster to scale horizontally
+- Does not require any type of additional tunneling to be present i.e. `minikube tunnel` in order to access from the internet
+
+To setup K3's install via: `curl -sfL https://get.k3s.io | sh -`
+
+Then create a `/etc/rancher/k3s/config.yaml` with the following contents:
+
+```yaml
+kubelet-arg:
+  - --system-reserved=cpu=2000m,memory=8000Mi,ephemeral-storage=256Gi
+  - --eviction-hard=imagefs.available<10%,imagefs.inodesFree<10%,memory.available<1Gi,nodefs.available<10%,nodefs.inodesFree<10%,pid.available<10%
+  - --max-pods=100
+```
+
+This ensures K3's uses at most 2 CPU core's and 8GB of memory to run leaving some resources for your host system. This is necessary since the
+cluster does not run in a VM and shares the host network space.
+
+Finally run: `./scripts/cluster_init.sh` to initialize the required ingress and load balancer controllers, namespaces, and secrets.
+
+### MiniKube
+
+Deployment is managed through Helm and Minikube. Follow the [MiniKube setup guide](https://minikube.sigs.k8s.io/docs/start/) to the point where you have your cluster running.
+Install [Helm](https://helm.sh) using their [installation script](https://helm.sh/docs/intro/install/).
+
+Create the `hearthhub` namespace on your cluster with: `kubectl create ns hearthhub`. It's also useful to have the 
+`Ingress` addon with MiniKube configured. You can configure this with `minikube addons enable ingress`.
+
+Since the API makes updates to custom AWS Cognito user attributes, make sure to enter the AWS Cognito related secrets for running the API:
+
+```shell
+# Cognito Secrets
+ kubectl create secret generic cognito-secrets \
+   --from-literal=USER_POOL_ID=us-east-1_example \
+   --from-literal=COGNITO_CLIENT_ID=abc123example \
+   --from-literal=COGNITO_CLIENT_SECRET=supersecretvalue \
+   -n hearthhub
+
+# AWS Secrets
+ kubectl create secret generic aws-creds \
+ --from-literal=AWS_ACCESS_KEY_ID=<KEY> \
+ --from-literal=AWS_SECRET_ACCESS_KEY=<SECRET> \
+ -n hearthhub
+```
+
+Finally, you should update your `/etc/hosts/` file with the DNS entry for your API:
+
+```shell
+# Add this to /etc/hosts
+127.0.0.1 hearthhub-api.example
+```
+
+:warning: For internet access to the API you will also need to deploy a `tinyproxy` or proxy service on a port of your choosing running on the host to proxy
+requests from the internet to the VM while the tunnel is running.
+
+### Deploying Valheim and HearthHub API
+To deploy the dedicated server run:
+
+`helm install valheim-server ./manifests/valheim-server -f ./manifests/valheim-server/values.yaml`
+
+You can override specific configuration like game world name, server name, and password with the helm `--set` command.
+
+To deploy the hearthhub-mod-api run:
+
+`helm install hearthhub-mod-api ./manifests/hearthhub-mod-api -f ./manifests/hearthhub-mod-api/values.yaml`
+
+## Running
+
+Before you can actually make requests to the API you need to run `minikube tunnel` in a separate terminal window and **keep it open**.
+This ensures that requests can be correctly proxied to the cluster from the local machine.
+
+Check the API is running with: `curl http://hearthhub-api.example/api/v1/health` You should see: `{"status": "OK"}`
+
+### Running Locally
+
+You can run this API locally but will need to create a `.env` file in the root of the project. The `.env` file should
+have the following env vars set:
+
+```shell
+# CPU & Mem requests and limits for the dedicated server that will be created
+CPU_REQUEST=1
+CPU_LIMIT=1
+MEMORY_REQUEST=4Gi
+MEMORY_LIMIT=4Gi
+
+# Valheim image conf
+VALHEIM_IMAGE_NAME=<YOUR VALHEIM SERVER IMAGE built from Dockerfile in this repo>
+VALHEIM_IMAGE_VERSION=<YOUR VALHEIM Server image version i.e. 0.0.1>
+
+# Cognito Conf
+COGNITO_CLIENT_ID=<YOUR_COGNITO_CLIENT_ID>
+COGNITO_CLIENT_SECRET=<YOUR_COGNITO_SECRET>
+USER_POOL_ID=<YOUR_USER_POOL_ID>
+
+# AWS SDK conf
+AWS_SECRET_ACCESS_KEY=<YOUR_AWS_SECRET_KEY>
+AWS_ACCESS_KEY_ID=<YOUR_AWS_ACCESS_KEY>
+AWS_REGION=us-east-1
+```
+
+Build the API with `go build -o main .` and run with `./main` The API will be running on: `http://localhost:8080`
+
 ## Networking
 
 This application was built and tested on [MiniKube](https://minikube.sigs.k8s.io). Minikube uses (usually) a Docker VM to run MiniKube which has its own network separate
-from your host machine. By running `minikube tunnel` it will forward services from your [MiniKube](https://minikube.sigs.k8s.io) network to your host network and **ONLY** 
+from your host machine. By running `minikube tunnel` it will forward services from your [MiniKube](https://minikube.sigs.k8s.io) network to your host network and **ONLY**
 your host network.
 
 What this means is that if you have a service like this:
@@ -88,7 +195,7 @@ flowchart LR
 ### TLDR
 
 ```shell
-minikube start --driver=docker
+minikube start --cpus 3 --memory 8192q
 
 # In a new window
 minikube tunnel
@@ -98,87 +205,6 @@ sudo systemctl start tinyproxy
 # Test tinyproxy -> minikube -> service -> pod
 curl http://127.0.0.1:8081/api/v1/health
 ```
-
-## Deployment
-
-### Kubernetes Setup 
-Deployment is managed through Helm and Minikube. Follow the [MiniKube setup guide](https://minikube.sigs.k8s.io/docs/start/) to the point where you have your cluster running.
-Install [Helm](https://helm.sh) using their [installation script](https://helm.sh/docs/intro/install/).
-
-Create the `hearthhub` namespace on your cluster with: `kubectl create ns hearthhub`. It's also useful to have the 
-`Ingress` addon with MiniKube configured. You can configure this with `minikube addons enable ingress`.
-
-Since the API makes updates to custom AWS Cognito user attributes, make sure to enter the AWS Cognito related secrets for running the API:
-
-```shell
-# Cognito Secrets
- kubectl create secret generic cognito-secrets \
-   --from-literal=USER_POOL_ID=us-east-1_example \
-   --from-literal=COGNITO_CLIENT_ID=abc123example \
-   --from-literal=COGNITO_CLIENT_SECRET=supersecretvalue \
-   -n hearthhub
-
-# AWS Secrets
- kubectl create secret generic aws-creds \
- --from-literal=AWS_ACCESS_KEY_ID=<KEY> \
- --from-literal=AWS_SECRET_ACCESS_KEY=<SECRET> \
- -n hearthhub
-```
-
-Finally, you should update your `/etc/hosts/` file with the DNS entry for your API:
-
-```shell
-# Add this to /etc/hosts
-127.0.0.1 hearthhub-api.example
-```
-
-### Deploying Valheim and HearthHub API
-To deploy the dedicated server run:
-
-`helm install valheim-server ./manifests/valheim-server -f ./manifests/valheim-server/values.yaml`
-
-You can override specific configuration like game world name, server name, and password with the helm `--set` command.
-
-To deploy the hearthhub-mod-api run:
-
-`helm install hearthhub-mod-api ./manifests/hearthhub-mod-api -f ./manifests/hearthhub-mod-api/values.yaml`
-
-## Running
-
-Before you can actually make requests to the API you need to run `minikube tunnel` in a separate terminal window and **keep it open**.
-This ensures that requests can be correctly proxied to the cluster from the local machine.
-
-Check the API is running with: `curl http://hearthhub-api.example/api/v1/health` You should see: `{"status": "OK"}`
-
-
-### Running Locally
-
-You can run this API locally but will need to create a `.env` file in the root of the project. The `.env` file should
-have the following env vars set:
-
-```shell
-# CPU & Mem requests and limits for the dedicated server that will be created
-CPU_REQUEST=1
-CPU_LIMIT=1
-MEMORY_REQUEST=4Gi
-MEMORY_LIMIT=4Gi
-
-# Valheim image conf
-VALHEIM_IMAGE_NAME=<YOUR VALHEIM SERVER IMAGE built from Dockerfile in this repo>
-VALHEIM_IMAGE_VERSION=<YOUR VALHEIM Server image version i.e. 0.0.1>
-
-# Cognito Conf
-COGNITO_CLIENT_ID=<YOUR_COGNITO_CLIENT_ID>
-COGNITO_CLIENT_SECRET=<YOUR_COGNITO_SECRET>
-USER_POOL_ID=<YOUR_USER_POOL_ID>
-
-# AWS SDK conf
-AWS_SECRET_ACCESS_KEY=<YOUR_AWS_SECRET_KEY>
-AWS_ACCESS_KEY_ID=<YOUR_AWS_ACCESS_KEY>
-AWS_REGION=us-east-1
-```
-
-Build the API with `go build -o main .` and run with `./main` The API will be running on: `http://localhost:8080`
 
 ## Built With
 

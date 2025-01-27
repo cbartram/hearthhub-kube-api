@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
-	"strings"
 )
 
 type InstallFilePayload struct {
@@ -61,7 +60,6 @@ func CreateFileInstallJob(clientset *kubernetes.Clientset, payload *InstallFileP
 			Labels: map[string]string{
 				"tenant-discord-id": payload.DiscordId,
 				"file-name":         fileName,
-				"destination":       strings.ReplaceAll(payload.Destination, "/", "-"),
 			},
 			Namespace: "hearthhub",
 		},

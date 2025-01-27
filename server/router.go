@@ -61,9 +61,13 @@ func NewRouter(ctx context.Context) *gin.Engine {
 		log.Fatalf("Error creating kubernetes client: %v", err)
 	}
 
+	basicAuth := gin.BasicAuth(gin.Accounts{
+		"hearthhub": os.Getenv("BASIC_AUTH_PASSWORD"),
+	})
+
 	apiGroup := r.Group("/api/v1")
-	serverGroup := apiGroup.Group("/server")
-	modGroup := apiGroup.Group("/file")
+	serverGroup := apiGroup.Group("/server", basicAuth)
+	modGroup := apiGroup.Group("/file", basicAuth)
 
 	apiGroup.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
