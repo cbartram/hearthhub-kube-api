@@ -1,0 +1,126 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	log "github.com/sirupsen/logrus"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+)
+
+// ResourceAction defines an interface for applying and rolling back Kubernetes resources.
+type ResourceAction interface {
+	Apply(clientset *kubernetes.Clientset) (string, error)
+	Rollback(clientset *kubernetes.Clientset) (string, error)
+	Name() string
+}
+
+// DeploymentAction represents a Deployment resource action.
+type DeploymentAction struct {
+	Deployment *appsv1.Deployment
+}
+
+func (d *DeploymentAction) Name() string {
+	return d.Deployment.Name
+}
+
+func (d *DeploymentAction) Apply(clientset *kubernetes.Clientset) (string, error) {
+	r, err := clientset.AppsV1().Deployments(d.Deployment.Namespace).Create(context.TODO(), d.Deployment, metav1.CreateOptions{})
+	if err != nil {
+		return d.Deployment.Name, fmt.Errorf("failed to create deployment: %v", err)
+	}
+	log.Infof("deployment: %s created successfully", r.GetName())
+	return r.GetName(), nil
+}
+
+func (d *DeploymentAction) Rollback(clientset *kubernetes.Clientset) (string, error) {
+	err := clientset.AppsV1().Deployments(d.Deployment.Namespace).Delete(context.TODO(), d.Deployment.Name, metav1.DeleteOptions{})
+	if err != nil && !errors.IsNotFound(err) {
+		return d.Deployment.Name, fmt.Errorf("failed to delete deployment: %v", err)
+	}
+	log.Infof("deployment: %s rolled back successfully", d.Deployment.Name)
+	return d.Deployment.Name, nil
+}
+
+// PVCAction represents a PersistentVolumeClaim resource action.
+type PVCAction struct {
+	PVC *corev1.PersistentVolumeClaim
+}
+
+func (p *PVCAction) Name() string {
+	return p.PVC.Name
+}
+
+func (p *PVCAction) Apply(clientset *kubernetes.Clientset) (string, error) {
+	r, err := clientset.CoreV1().PersistentVolumeClaims(p.PVC.Namespace).Create(context.TODO(), p.PVC, metav1.CreateOptions{})
+	if err != nil {
+		return p.PVC.Name, fmt.Errorf("failed to create PVC: %v", err)
+	}
+	log.Infof("PVC: %s created successfully", r.GetName())
+	return r.Name, nil
+}
+
+func (p *PVCAction) Rollback(clientset *kubernetes.Clientset) (string, error) {
+	err := clientset.CoreV1().PersistentVolumeClaims(p.PVC.Namespace).Delete(context.TODO(), p.PVC.Name, metav1.DeleteOptions{})
+	if err != nil && !errors.IsNotFound(err) {
+		return p.PVC.Name, fmt.Errorf("failed to delete PVC: %v", err)
+	}
+	log.Infof("PVC: %s rolled back successfully", p.PVC.Name)
+	return p.PVC.Name, nil
+}
+
+type KubernetesService struct {
+	Client          *kubernetes.Clientset
+	ResourceActions []ResourceAction
+}
+
+// MakeKubernetesService Creates a new kubernetes service object which intelligently loads configuration from
+// either in-cluster or local if in-cluster fails.
+func MakeKubernetesService() *KubernetesService {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		log.Infof("could not create in cluster config. Attempting to load local kube config: %v", err.Error())
+		config, err = clientcmd.BuildConfigFromFlags("", clientcmd.RecommendedHomeFile)
+		if err != nil {
+			log.Fatalf("could not load local kubernetes config: %v", err.Error())
+		}
+		log.Infof("local kube config loaded successfully")
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		log.Fatalf("Error creating kubernetes client: %v", err)
+	}
+	return &KubernetesService{
+		Client: clientset,
+	}
+}
+
+func (k *KubernetesService) AddAction(action ResourceAction) {
+	k.ResourceActions = append(k.ResourceActions, action)
+}
+
+// ApplyResources applies a list of resources and rolls them back on failure.
+func (k *KubernetesService) ApplyResources() error {
+	for _, resource := range k.ResourceActions {
+		if name, err := resource.Apply(k.Client); err != nil {
+			log.Infof("Error applying resource: %s err: %v", name, err)
+
+			// Rollback all previously applied resources
+			for _, appliedResource := range k.ResourceActions {
+				if name, err := appliedResource.Rollback(k.Client); err != nil {
+					log.Infof("Error rolling back resource: %s err: %v", name, err)
+				}
+			}
+			return fmt.Errorf("failed to apply resource: %s, rolled back changes", name)
+		}
+	}
+
+	log.Infof("%v resources applied successfully", len(k.ResourceActions))
+	return nil
+}

@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: server-resource-config
+  name: server-config
   namespace: hearthhub
 data:
   VALHEIM_IMAGE_NAME: "cbartram/hearthhub"

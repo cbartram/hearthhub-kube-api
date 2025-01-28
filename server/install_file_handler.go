@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/cbartram/hearthhub-mod-api/server/service"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -27,7 +28,7 @@ type InstallFilePayload struct {
 
 type InstallFileHandler struct{}
 
-func (h *InstallFileHandler) HandleRequest(c *gin.Context, clientset *kubernetes.Clientset, ctx context.Context) {
+func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService *service.KubernetesService, ctx context.Context) {
 	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
@@ -41,13 +42,13 @@ func (h *InstallFileHandler) HandleRequest(c *gin.Context, clientset *kubernetes
 		return
 	}
 
-	name, err := CreateFileInstallJob(clientset, &reqBody)
+	name, err := CreateFileInstallJob(kubeService.Client, &reqBody)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("could not create mod install job: %v", err)})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("mod install job created: %s", *name)})
+	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("install file job created: %s", *name)})
 }
 
 // CreateFileInstallJob Creates a new kubernetes job which attaches the valheim server PVC, downloads mods from S3,
@@ -69,7 +70,7 @@ func CreateFileInstallJob(clientset *kubernetes.Clientset, payload *InstallFileP
 					Containers: []corev1.Container{
 						{
 							Name:  "main",
-							Image: "cbartram/hearthhub-plugin-manager:0.0.4",
+							Image: "cbartram/hearthhub-plugin-manager:0.0.5",
 							Args: []string{
 								"./plugin-manager",
 								"-discord_id",
@@ -88,7 +89,7 @@ func CreateFileInstallJob(clientset *kubernetes.Clientset, payload *InstallFileP
 								{
 									ConfigMapRef: &corev1.ConfigMapEnvSource{
 										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "server-resource-config",
+											Name: "server-config",
 										},
 									},
 								},
@@ -100,48 +101,21 @@ func CreateFileInstallJob(clientset *kubernetes.Clientset, payload *InstallFileP
 									},
 								},
 							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "valheim-pvc",
-									MountPath: "/valheim/BepInEx/plugins/",
-									SubPath:   "plugins",
-								},
-								{
-									Name:      "valheim-world-pvc",
-									MountPath: "/root/.config/unity3d/IronGate/Valheim",
-								},
-							},
+							VolumeMounts: MakeVolumeMounts(),
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
 									corev1.ResourceMemory: resource.MustParse("128Mi"),
 									corev1.ResourceCPU:    resource.MustParse("100m"),
 								},
 								Limits: corev1.ResourceList{
-									corev1.ResourceMemory: resource.MustParse("128Mi"),
-									corev1.ResourceCPU:    resource.MustParse("100m"),
+									corev1.ResourceMemory: resource.MustParse("750Mi"),
+									corev1.ResourceCPU:    resource.MustParse("250m"),
 								},
 							},
 						},
 					},
 					RestartPolicy: corev1.RestartPolicyNever,
-					Volumes: []corev1.Volume{
-						{
-							Name: "valheim-pvc",
-							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-									ClaimName: fmt.Sprintf("valheim-pvc-%s", payload.DiscordId),
-								},
-							},
-						},
-						{
-							Name: "valheim-world-pvc",
-							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-									ClaimName: fmt.Sprintf("valheim-world-pvc-%s", payload.DiscordId),
-								},
-							},
-						},
-					},
+					Volumes:       MakeVolumes(fmt.Sprintf("valheim-pvc-%s", payload.DiscordId)),
 				},
 			},
 		},

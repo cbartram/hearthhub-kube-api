@@ -2,11 +2,9 @@ package server
 
 import (
 	"context"
+	"github.com/cbartram/hearthhub-mod-api/server/service"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	"log"
 	"net/http"
 	"os"
@@ -46,20 +44,7 @@ func NewRouter(ctx context.Context) *gin.Engine {
 
 	r.Use(LogrusMiddleware(logger))
 
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		log.Printf("could not create in cluster config. Attempting to load local kube config: %v", err.Error())
-		config, err = clientcmd.BuildConfigFromFlags("", clientcmd.RecommendedHomeFile)
-		if err != nil {
-			log.Fatalf("could not load local kubernetes config: %v", err.Error())
-		}
-		log.Printf("local kube config loaded successfully")
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		log.Fatalf("Error creating kubernetes client: %v", err)
-	}
+	kubeService := service.MakeKubernetesService()
 
 	basicAuth := gin.BasicAuth(gin.Accounts{
 		"hearthhub": os.Getenv("BASIC_AUTH_PASSWORD"),
@@ -77,17 +62,17 @@ func NewRouter(ctx context.Context) *gin.Engine {
 
 	modGroup.POST("/install", func(c *gin.Context) {
 		handler := InstallFileHandler{}
-		handler.HandleRequest(c, clientset, ctx)
+		handler.HandleRequest(c, kubeService, ctx)
 	})
 
 	serverGroup.POST("/create", func(c *gin.Context) {
 		handler := CreateServerHandler{}
-		handler.HandleRequest(c, clientset, ctx)
+		handler.HandleRequest(c, kubeService, ctx)
 	})
 
 	serverGroup.PUT("/scale", func(c *gin.Context) {
 		handler := ScaleServerHandler{}
-		handler.HandleRequest(c, clientset, ctx)
+		handler.HandleRequest(c, kubeService, ctx)
 	})
 
 	return r

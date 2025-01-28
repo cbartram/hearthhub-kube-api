@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/json"
-	"k8s.io/client-go/kubernetes"
 	"net/http"
 	"os"
 	"strconv"
@@ -99,7 +98,7 @@ type CreateServerHandler struct{}
 // responsible for creating the initial deployment and pvc which in turn creates the replicaset and pod for the server.
 // Future server management like mod installation, user termination requests, custom world uploads, etc... will use
 // the /api/v1/server/scale route to scale the replicas to 0-1 without removing the deployment or PVC.
-func (h *CreateServerHandler) HandleRequest(c *gin.Context, clientset *kubernetes.Clientset, ctx context.Context) {
+func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService *service.KubernetesService, ctx context.Context) {
 	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
@@ -146,7 +145,7 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, clientset *kubernete
 	}
 
 	config := MakeServerConfigWithDefaults(reqBody.Name, reqBody.World, reqBody.Password, reqBody.EnableCrossplay, reqBody.Public, reqBody.Modifiers)
-	valheimServer, err := CreateDedicatedServerDeployment(config, clientset, &reqBody)
+	valheimServer, err := CreateDedicatedServerDeployment(config, kubeService, &reqBody)
 	if err != nil {
 		log.Errorf("could not create dedicated server deployment: %s", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create dedicated server deployment: " + err.Error()})
@@ -189,7 +188,7 @@ func MakeServerConfigWithDefaults(name, world, password string, crossplay bool, 
 }
 
 // CreateDedicatedServerDeployment Creates the valheim dedicated server deployment and pvc given the server configuration.
-func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kubernetes.Clientset, request *CreateServerRequest) (*ValheimDedicatedServer, error) {
+func CreateDedicatedServerDeployment(serverConfig *ServerConfig, kubeService *service.KubernetesService, request *CreateServerRequest) (*ValheimDedicatedServer, error) {
 	// Ensures the refresh token doesn't get echo'd in the response
 	request.RefreshToken = ""
 	serverArgs := []string{
@@ -231,11 +230,10 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 	// Deployments & PVC are always tied to the discord ID. When a server is terminated and re-created it
 	// will be made with a different pod name but the same deployment name making for easy replica scaling.
 	pvcName := fmt.Sprintf("valheim-pvc-%s", request.DiscordId)
-	worldPvcName := fmt.Sprintf("valheim-world-pvc-%s", request.DiscordId)
 	deploymentName := fmt.Sprintf("valheim-%s", request.DiscordId)
 
 	log.Infof("server args: %v", serverArgs)
-	log.Infof("creating k8s objects: mod-pvc: %s, world-pvc: %s, deployment: %s", pvcName, worldPvcName, deploymentName)
+
 	// Create deployment object
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -302,7 +300,7 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 								{
 									ConfigMapRef: &corev1.ConfigMapEnvSource{
 										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "server-resource-config",
+											Name: "server-config",
 										},
 									},
 								},
@@ -310,39 +308,43 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 							VolumeMounts: MakeVolumeMounts(),
 						},
 					},
-					Volumes: []corev1.Volume{
-						{
-							// PVC which holds mod information (used by the plugin-manager to install new mods)
-							Name: "valheim-data",
-							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-									ClaimName: pvcName,
-								},
-							},
-						},
-						{
-							// Unknown: this was included in the docker_start_server.sh file from Irongate. Unsure of how its used.
-							Name:         "irongate",
-							VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-						},
-					},
+					Volumes: MakeVolumes(pvcName),
 				},
 			},
 		},
 	}
 
+	kubeService.AddAction(&service.PVCAction{PVC: MakePvc(pvcName, deploymentName, request.DiscordId)})
+	kubeService.AddAction(&service.DeploymentAction{Deployment: deployment})
+
+	err := kubeService.ApplyResources()
+	if err != nil {
+		log.Errorf("failed to apply kubernetes resource: %v", err)
+		return nil, err
+	}
+
+	return &ValheimDedicatedServer{
+		WorldDetails:   *request,
+		PvcName:        kubeService.ResourceActions[0].Name(),
+		DeploymentName: kubeService.ResourceActions[1].Name(),
+		State:          RUNNING,
+	}, nil
+}
+
+// MakePvc Returns the PVC object from the Kubernetes API for creating a new volume.
+func MakePvc(name string, deploymentName string, discordId string) *corev1.PersistentVolumeClaim {
 	// We only need a persistent volume for the plugins that will be installed. Need to shut down server, mount
 	// pvc to a Job, install plugins to pvc, restart server, re-mount pvc
 	// Game files like backups and world files will be (eventually) persisted to s3 by
 	// the sidecar container so EmptyDir{} can be used for those.
-	pvc := &corev1.PersistentVolumeClaim{
+	return &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pvcName,
+			Name:      name,
 			Namespace: "hearthhub",
 			Labels: map[string]string{
 				"app":               "valheim",
 				"created-by":        deploymentName,
-				"tenant-discord-id": request.DiscordId,
+				"tenant-discord-id": discordId,
 			},
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
@@ -356,31 +358,30 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, clientset *kube
 			},
 		},
 	}
-
-	// Create Deployment and PVC in the cluster
-	pvcCreateResult, err := clientset.CoreV1().PersistentVolumeClaims("hearthhub").Create(context.TODO(), pvc, metav1.CreateOptions{})
-	if err != nil {
-		log.Errorf("Error creating pvc: %v", err)
-		return nil, err
-	}
-
-	log.Infof("created PVC: %s", pvcCreateResult.Name)
-
-	result, err := clientset.AppsV1().Deployments("hearthhub").Create(context.TODO(), deployment, metav1.CreateOptions{})
-	if err != nil {
-		log.Errorf("error creating deployment: %v", err)
-		return nil, err
-	}
-	log.Infof("created deployment %q in namespace %q", result.GetObjectMeta().GetName(), result.GetObjectMeta().GetNamespace())
-
-	return &ValheimDedicatedServer{
-		WorldDetails:   *request,
-		PvcName:        pvcCreateResult.GetObjectMeta().GetName(),
-		DeploymentName: result.GetObjectMeta().GetName(),
-		State:          RUNNING,
-	}, nil
 }
 
+// MakeVolumes creates the volumes that will be mounted for both the server deployment and any file installation jobs.
+func MakeVolumes(pvcName string) []corev1.Volume {
+	return []corev1.Volume{
+		{
+			// PVC which holds mod information (used by the plugin-manager to install new mods)
+			Name: "valheim-data",
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: pvcName,
+				},
+			},
+		},
+		{
+			// Unknown: this was included in the docker_start_server.sh file from Irongate. Unsure of how its used.
+			Name:         "irongate",
+			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+		},
+	}
+}
+
+// MakeVolumeMounts Creates the PVC volume mount locations for the deployment pod. These volume mounts
+// are the only places files can be installed that will persist outside the life of the server.
 func MakeVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		{

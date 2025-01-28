@@ -11,7 +11,6 @@ import (
 	"io"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/json"
-	"k8s.io/client-go/kubernetes"
 	"net/http"
 )
 
@@ -23,7 +22,7 @@ type ScaleServerRequest struct {
 
 type ScaleServerHandler struct{}
 
-func (h *ScaleServerHandler) HandleRequest(c *gin.Context, clientset *kubernetes.Clientset, ctx context.Context) {
+func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService *service.KubernetesService, ctx context.Context) {
 	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
@@ -85,7 +84,7 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, clientset *kubernetes
 
 	// Scale down the deployment
 	deploymentName := fmt.Sprintf("valheim-%s", reqBody.DiscordId)
-	scale, err := clientset.AppsV1().Deployments("hearthhub").GetScale(context.TODO(), deploymentName, metav1.GetOptions{})
+	scale, err := kubeService.Client.AppsV1().Deployments("hearthhub").GetScale(context.TODO(), deploymentName, metav1.GetOptions{})
 	if err != nil {
 		// TODO If deployment doesn't exist we are in a bad state and need to set cognito custom:server_details to "nil"
 		log.Errorf("failed to get deployment scale from kubernetes api: %v", err)
@@ -94,7 +93,7 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, clientset *kubernetes
 	}
 
 	scale.Spec.Replicas = reqBody.Replicas
-	_, err = clientset.AppsV1().Deployments("hearthhub").UpdateScale(context.TODO(), deploymentName, scale, metav1.UpdateOptions{})
+	_, err = kubeService.Client.AppsV1().Deployments("hearthhub").UpdateScale(context.TODO(), deploymentName, scale, metav1.UpdateOptions{})
 	if err != nil {
 		log.Errorf("failed to update deployment scale: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to update deployment scale: %v", err)})
