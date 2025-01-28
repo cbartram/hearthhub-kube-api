@@ -14,16 +14,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 )
 
-type InstallFilePayload struct {
+type FilePayload struct {
 	DiscordId    string `json:"discord_id"`
 	RefreshToken string `json:"refresh_token"`
 	Prefix       string `json:"prefix"`
 	Destination  string `json:"destination"`
 	IsArchive    bool   `json:"is_archive"`
+	Operation    string `json:"operation"`
 }
 
 type InstallFileHandler struct{}
@@ -36,24 +38,24 @@ func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService *service.
 		return
 	}
 
-	var reqBody InstallFilePayload
+	var reqBody FilePayload
 	if err := json.Unmarshal(bodyRaw, &reqBody); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
 		return
 	}
 
-	name, err := CreateFileInstallJob(kubeService.Client, &reqBody)
+	name, err := CreateFileJob(kubeService.Client, &reqBody)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("could not create mod install job: %v", err)})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("install file job created: %s", *name)})
+	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("file job created: %s", *name)})
 }
 
-// CreateFileInstallJob Creates a new kubernetes job which attaches the valheim server PVC, downloads mods from S3,
+// CreateFileJob Creates a new kubernetes job which attaches the valheim server PVC, downloads mods from S3,
 // and installs mods onto the PVC before restarting the Valheim server.
-func CreateFileInstallJob(clientset *kubernetes.Clientset, payload *InstallFilePayload) (*string, error) {
+func CreateFileJob(clientset *kubernetes.Clientset, payload *FilePayload) (*string, error) {
 	fileName := filepath.Base(payload.Prefix)
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -70,7 +72,7 @@ func CreateFileInstallJob(clientset *kubernetes.Clientset, payload *InstallFileP
 					Containers: []corev1.Container{
 						{
 							Name:  "main",
-							Image: "cbartram/hearthhub-plugin-manager:0.0.5",
+							Image: fmt.Sprintf("%s:%s", os.Getenv("FILE_MANAGER_IMAGE_NAME"), os.Getenv("FILE_MANAGER_IMAGE_VERSION")),
 							Args: []string{
 								"./plugin-manager",
 								"-discord_id",
@@ -81,6 +83,8 @@ func CreateFileInstallJob(clientset *kubernetes.Clientset, payload *InstallFileP
 								payload.Prefix,
 								"-destination",
 								payload.Destination,
+								"-op",
+								payload.Operation,
 								"-archive",
 								strconv.FormatBool(payload.IsArchive),
 							},

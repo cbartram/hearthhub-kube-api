@@ -4,7 +4,18 @@ namespace: hearthhub
 image:
   repository: cbartram/hearthhub-mod-api
   pullPolicy: IfNotPresent
+
+  # Tag for the API itself
   tag: "0.0.20"
+
+  # Versions for images the API is responsible for deploying
+  # i.e. sidecar container, valheim server, and mod/file manager
+  valheimImageName: "cbartram/hearthhub"
+  valheimImageVersion: "0.0.6"
+  backupManagerImageName: "cbartram/hearthhub-sidecar"
+  backupManagerImageVersion: "0.0.4"
+  fileManagerImageName: "cbartram/hearthhub-plugin-manager"
+  fileManagerImageVersion: "0.0.5"
 
 imagePullSecrets: []
 nameOverride: ""

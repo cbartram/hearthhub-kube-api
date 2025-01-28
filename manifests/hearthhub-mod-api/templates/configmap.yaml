@@ -4,12 +4,21 @@ metadata:
   name: server-config
   namespace: hearthhub
 data:
-  VALHEIM_IMAGE_NAME: "cbartram/hearthhub"
-  VALHEIM_IMAGE_VERSION: "0.0.6"
+  # Versions and images for containers the API is responsible
+  # for deploying
+  VALHEIM_IMAGE_NAME: {{.Values.image.valheimImageName | quote }}
+  VALHEIM_IMAGE_VERSION: {{.Values.image.valheimImageVersion | quote }}
+  BACKUP_MANAGER_IMAGE_NAME: {{ .Values.image.backupManagerImageName | quote }}
+  BACKUP_MANAGER_IMAGE_VERSION: {{ .Values.image.backupManagerImageVersion | quote }}
+  FILE_MANAGER_IMAGE_NAME: {{ .Values.image.fileManagerImageName | quote }}
+  FILE_MANAGER_IMAGE_VERSION:  {{ .Values.image.fileManagerImageVersion | quote }}
+
   AWS_REGION: "us-east-1"
   GIN_MODE: "release"
+  BACKUP_FREQUENCY_MIN: "10"
+
+  # Resources
   CPU_REQUEST: "2"
   MEMORY_REQUEST: "4Gi"
   CPU_LIMIT: "2"
   MEMORY_LIMIT: "6Gi"
-  BACKUP_FREQUENCY_MIN: "10"

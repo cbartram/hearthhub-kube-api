@@ -86,6 +86,8 @@ type CreateServerRequest struct {
 }
 
 type ValheimDedicatedServer struct {
+	ServerIp       string              `json:"server_ip"`
+	ServerPort     int                 `json:"server_port"`
 	WorldDetails   CreateServerRequest `json:"world_details"`
 	PvcName        string              `json:"mod_pvc_name"`
 	DeploymentName string              `json:"deployment_name"`
@@ -285,7 +287,7 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, kubeService *se
 						},
 						{
 							Name:  "backup-manager",
-							Image: "cbartram/hearthhub-sidecar:0.0.4",
+							Image: fmt.Sprintf("%s:%s", os.Getenv("BACKUP_MANAGER_IMAGE_NAME"), os.Getenv("BACKUP_MANAGER_IMAGE_VERSION")),
 
 							// Ensure this container gets AWS creds so it can upload to S3
 							EnvFrom: []corev1.EnvFromSource{
@@ -324,6 +326,8 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, kubeService *se
 	}
 
 	return &ValheimDedicatedServer{
+		ServerIp:       "", // TODO Use a get request to determine current public ip of host.
+		ServerPort:     serverPort,
 		WorldDetails:   *request,
 		PvcName:        kubeService.ResourceActions[0].Name(),
 		DeploymentName: kubeService.ResourceActions[1].Name(),
