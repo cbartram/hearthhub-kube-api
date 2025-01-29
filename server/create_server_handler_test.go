@@ -38,15 +38,6 @@ func (f *FakeKubeClient) GetClient() kubernetes.Interface {
 }
 
 func TestHandleCreateServerRoute(t *testing.T) {
-
-	gin.SetMode(gin.TestMode) // Set Gin to test mode
-	router := gin.Default()
-	router.POST("/create-server", func(c *gin.Context) {
-		handler := CreateServerHandler{}
-		handler.HandleRequest(c, &FakeKubeClient{}, context.TODO())
-	})
-
-	// Test cases
 	tests := []struct {
 		name           string
 		method         string
@@ -54,11 +45,13 @@ func TestHandleCreateServerRoute(t *testing.T) {
 		expectedStatus int
 		requestBody    io.Reader
 		expectedBody   string
+		requiresUser   bool
 	}{
 		{
 			name:           "Bad request body",
 			method:         "POST",
 			path:           "/create-server",
+			requiresUser:   false,
 			expectedStatus: http.StatusBadRequest,
 			requestBody:    bytes.NewBuffer(nil),
 			expectedBody:   `{"error":"invalid request body: unexpected end of JSON input"}`,
@@ -67,15 +60,32 @@ func TestHandleCreateServerRoute(t *testing.T) {
 			name:           "Fails input validation",
 			method:         "POST",
 			path:           "/create-server",
+			requiresUser:   false,
 			expectedStatus: http.StatusBadRequest,
 			requestBody:    bytes.NewBuffer([]byte(`{"world": "foo", "name": "bar"}`)), // Missing password
 			expectedBody:   `{"error":"invalid request body: missing required fields name, world, or password"}`,
 		},
+		{
+			name:           "No user in context",
+			method:         "POST",
+			path:           "/create-server",
+			expectedStatus: http.StatusInternalServerError,
+			requiresUser:   false,
+			requestBody:    bytes.NewBuffer([]byte(`{"world": "foo", "name": "bar", "password": "hereisapassword"}`)),
+			expectedBody:   `{"error":"user not found in context"}`,
+		},
 	}
 
+	gin.SetMode(gin.TestMode) // Set Gin to test mode
+
 	for _, tt := range tests {
-		// bytes.NewBuffer()
 		t.Run(tt.name, func(t *testing.T) {
+			router := gin.Default()
+			router.POST("/create-server", func(c *gin.Context) {
+				handler := CreateServerHandler{}
+				handler.HandleRequest(c, &FakeKubeClient{}, &MockCognitoService{}, context.TODO())
+			})
+
 			req, err := http.NewRequest(tt.method, tt.path, tt.requestBody)
 			assert.NoError(t, err)
 			resp := httptest.NewRecorder()

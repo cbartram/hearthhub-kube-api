@@ -56,7 +56,7 @@ func NewRouter(ctx context.Context) *gin.Engine {
 
 	serverGroup.POST("/create", func(c *gin.Context) {
 		handler := CreateServerHandler{}
-		handler.HandleRequest(c, kubeService, ctx)
+		handler.HandleRequest(c, kubeService, cognitoService, ctx)
 	})
 
 	serverGroup.PUT("/scale", func(c *gin.Context) {

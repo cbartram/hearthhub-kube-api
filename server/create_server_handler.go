@@ -80,7 +80,7 @@ type CreateServerHandler struct{}
 // responsible for creating the initial deployment and pvc which in turn creates the replicaset and pod for the server.
 // Future server management like mod installation, user termination requests, custom world uploads, etc... will use
 // the /api/v1/server/scale route to scale the replicas to 0-1 without removing the deployment or PVC.
-func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService service.KubernetesService, ctx context.Context) {
+func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService service.KubernetesService, cognito service.CognitoService, ctx context.Context) {
 	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
@@ -100,7 +100,6 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService service.
 		return
 	}
 
-	cognito := service.MakeCognitoService()
 	tmp, exists := c.Get("user")
 	if !exists {
 		log.Errorf("user not found in context")
