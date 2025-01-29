@@ -54,42 +54,27 @@ const (
 	TERMINATED = "terminated"
 )
 
-type ServerConfig struct {
-	Name                  string
-	Port                  string
-	World                 string
-	Password              string
-	EnableCrossplay       bool
-	Public                bool
-	SaveIntervalSeconds   int
-	BackupCount           int
-	InitialBackupSeconds  int
-	BackupIntervalSeconds int
-	InstanceId            string
-	Modifiers             []ServerModifier
-}
-
-type ServerModifier struct {
-	ModifierKey   string `json:"key"`
-	ModifierValue string `json:"value"`
-}
-
 type CreateServerRequest struct {
-	Name            string           `json:"name"`
-	World           string           `json:"world"`
-	Password        string           `json:"password"`
-	EnableCrossplay bool             `json:"enable_crossplay"`
-	Public          bool             `json:"public"`
-	Modifiers       []ServerModifier `json:"modifiers"`
+	Name                  *string    `json:"name"`
+	World                 *string    `json:"world"`
+	Password              *string    `json:"password"`
+	Port                  *string    `json:"port"`
+	EnableCrossplay       *bool      `json:"enable_crossplay,omitempty"`
+	Public                *bool      `json:"public,omitempty"`
+	Modifiers             []Modifier `json:"modifiers,omitempty"`
+	SaveIntervalSeconds   *int       `json:"save_interval_seconds,omitempty"`
+	BackupCount           *int       `json:"backup_count,omitempty"`
+	InitialBackupSeconds  *int       `json:"initial_backup_seconds,omitempty"`
+	BackupIntervalSeconds *int       `json:"backup_interval_seconds,omitempty"`
 }
 
-type ValheimDedicatedServer struct {
-	ServerIp       string              `json:"server_ip"`
-	ServerPort     int                 `json:"server_port"`
-	WorldDetails   CreateServerRequest `json:"world_details"`
-	PvcName        string              `json:"mod_pvc_name"`
-	DeploymentName string              `json:"deployment_name"`
-	State          string              `json:"state"`
+type CreateServerResponse struct {
+	ServerIp       string `json:"server_ip"`
+	ServerPort     int    `json:"server_port"`
+	WorldDetails   Config `json:"world_details"`
+	PvcName        string `json:"mod_pvc_name"`
+	DeploymentName string `json:"deployment_name"`
+	State          string `json:"state"`
 }
 
 type CreateServerHandler struct{}
@@ -112,6 +97,11 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService *service
 		return
 	}
 
+	if reqBody.Name == nil || reqBody.World == nil || reqBody.Password == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: name, world, and password are required fields."})
+		return
+	}
+
 	// TODO Validate port, modifiers, etc...
 	cognito := service.MakeCognitoService()
 	tmp, exists := c.Get("user")
@@ -127,7 +117,7 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService *service
 	// user could create more than 1 server.
 	attributes, err := cognito.GetUserAttributes(ctx, &user.Credentials.AccessToken)
 	serverDetails := util.GetAttribute(attributes, "custom:server_details")
-	tmpServer := ValheimDedicatedServer{}
+	res := CreateServerResponse{}
 	log.Infof("user attributes: %v", serverDetails)
 	if err != nil {
 		log.Errorf("could not get user attributes: %v", err)
@@ -137,13 +127,13 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService *service
 
 	// If server is nil it's the first time the user is booting up.
 	if serverDetails != "nil" {
-		json.Unmarshal([]byte(serverDetails), &tmpServer)
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("server: %s already exists for user: %s. use PUT /api/v1/server/scale to manage replicas.", tmpServer.DeploymentName, user.Email)})
+		json.Unmarshal([]byte(serverDetails), &res)
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("server: %s already exists for user: %s. use PUT /api/v1/server/scale to manage replicas.", res.DeploymentName, user.Email)})
 		return
 	}
 
-	config := MakeServerConfigWithDefaults(reqBody.Name, reqBody.World, reqBody.Password, reqBody.EnableCrossplay, reqBody.Public, reqBody.Modifiers)
-	valheimServer, err := CreateDedicatedServerDeployment(config, kubeService, &reqBody, user.DiscordID)
+	config := MakeConfigWithDefaults(&reqBody)
+	valheimServer, err := CreateDedicatedServerDeployment(config, kubeService, user.DiscordID)
 	if err != nil {
 		log.Errorf("could not create dedicated server deployment: %s", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create dedicated server deployment: " + err.Error()})
@@ -168,61 +158,10 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService *service
 	c.JSON(http.StatusOK, valheimServer)
 }
 
-func MakeServerConfigWithDefaults(name, world, password string, crossplay bool, public bool, modifiers []ServerModifier) *ServerConfig {
-	return &ServerConfig{
-		Name:                  name,
-		World:                 world,
-		Port:                  "2456",
-		Password:              password,
-		EnableCrossplay:       crossplay,
-		Public:                public,
-		InstanceId:            util.GenerateInstanceId(8),
-		Modifiers:             modifiers,
-		SaveIntervalSeconds:   1800,
-		BackupCount:           3,
-		InitialBackupSeconds:  7200,
-		BackupIntervalSeconds: 43200,
-	}
-}
-
 // CreateDedicatedServerDeployment Creates the valheim dedicated server deployment and pvc given the server configuration.
-func CreateDedicatedServerDeployment(serverConfig *ServerConfig, kubeService *service.KubernetesService, request *CreateServerRequest, discordId string) (*ValheimDedicatedServer, error) {
-	// Ensures the refresh token doesn't get echo'd in the response
-	serverArgs := []string{
-		"./valheim_server.x86_64",
-		"-name",
-		serverConfig.Name,
-		"-port",
-		serverConfig.Port,
-		"-world",
-		serverConfig.World,
-		"-password",
-		serverConfig.Password,
-		"-instanceid",
-		serverConfig.InstanceId,
-		"-backups",
-		strconv.Itoa(serverConfig.BackupCount),
-		"-backupshort",
-		strconv.Itoa(serverConfig.InitialBackupSeconds),
-		"-backuplong",
-		strconv.Itoa(serverConfig.BackupIntervalSeconds),
-	}
-
-	if serverConfig.EnableCrossplay {
-		serverArgs = append(serverArgs, "-crossplay")
-	}
-
-	if serverConfig.Public {
-		serverArgs = append(serverArgs, "-public", "1")
-	} else {
-		serverArgs = append(serverArgs, "-public", "0")
-	}
-
-	for _, modifier := range serverConfig.Modifiers {
-		serverArgs = append(serverArgs, "-modifier", modifier.ModifierKey, modifier.ModifierValue)
-	}
-
-	serverPort, _ := strconv.Atoi(serverConfig.Port)
+func CreateDedicatedServerDeployment(config *Config, kubeService *service.KubernetesService, discordId string) (*CreateServerResponse, error) {
+	serverArgs := config.ToStringArgs()
+	serverPort, _ := strconv.Atoi(config.Port)
 
 	// Deployments & PVC are always tied to the discord ID. When a server is terminated and re-created it
 	// will be made with a different pod name but the same deployment name making for easy replica scaling.
@@ -325,10 +264,10 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, kubeService *se
 		log.Errorf("failed to get public ip: %v", err)
 	}
 
-	return &ValheimDedicatedServer{
+	return &CreateServerResponse{
 		ServerIp:       ip,
 		ServerPort:     serverPort,
-		WorldDetails:   *request,
+		WorldDetails:   *config,
 		PvcName:        kubeService.ResourceActions[0].Name(),
 		DeploymentName: kubeService.ResourceActions[1].Name(),
 		State:          RUNNING,

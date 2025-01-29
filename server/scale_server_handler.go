@@ -53,7 +53,7 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService *service.
 	// user could create more than 1 server.
 	attributes, err := cognito.GetUserAttributes(ctx, &user.Credentials.AccessToken)
 	serverJson := util.GetAttribute(attributes, "custom:server_details")
-	server := ValheimDedicatedServer{}
+	server := CreateServerResponse{}
 
 	if err != nil {
 		log.Errorf("could not get user attributes: %v", err)
@@ -111,13 +111,13 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService *service.
 }
 
 // UpdateServerDetails Updates the custom:server_details field in Cognito with the information from the scaled server.
-func UpdateServerDetails(ctx context.Context, cognito *service.CognitoService, server *ValheimDedicatedServer, user *service.CognitoUser, state string) (*ValheimDedicatedServer, error) {
-	server.State = state
-	s, _ := json.Marshal(server)
+func UpdateServerDetails(ctx context.Context, cognito *service.CognitoService, res *CreateServerResponse, user *service.CognitoUser, state string) (*CreateServerResponse, error) {
+	res.State = state
+	s, _ := json.Marshal(res)
 	serverAttribute := util.MakeAttribute("custom:server_details", string(s))
 	err := cognito.UpdateUserAttributes(ctx, &user.Credentials.AccessToken, []types.AttributeType{serverAttribute})
 	if err != nil {
 		return nil, err
 	}
-	return server, nil
+	return res, nil
 }
