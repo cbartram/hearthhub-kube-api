@@ -14,7 +14,14 @@ import (
 	"path/filepath"
 )
 
-type CognitoService struct {
+type CognitoService interface {
+	GetUserAttributes(ctx context.Context, accessToken *string) ([]types.AttributeType, error)
+	AuthUser(ctx context.Context, refreshToken, discordId *string) (*CognitoUser, error)
+	GetUser(ctx context.Context, discordId *string) (*CognitoUser, error)
+	UpdateUserAttributes(ctx context.Context, accessToken *string, attributes []types.AttributeType) error
+}
+
+type CognitoServiceImpl struct {
 	cognitoClient *cognitoidentityprovider.Client
 	userPoolID    string
 	clientID      string
@@ -44,13 +51,13 @@ type SessionData struct {
 }
 
 // MakeCognitoService creates a new instance of CognitoAuthManager
-func MakeCognitoService() *CognitoService {
+func MakeCognitoService() CognitoService {
 	cfg, err := config.LoadDefaultConfig(context.TODO())
 	if err != nil {
 		log.Errorf("error loading default aws config: %s", err)
 	}
 
-	return &CognitoService{
+	return &CognitoServiceImpl{
 		cognitoClient: cognitoidentityprovider.NewFromConfig(cfg),
 		userPoolID:    os.Getenv("USER_POOL_ID"),
 		clientID:      os.Getenv("COGNITO_CLIENT_ID"),
@@ -59,7 +66,7 @@ func MakeCognitoService() *CognitoService {
 	}
 }
 
-func (c *CognitoService) GetUserAttributes(ctx context.Context, accessToken *string) ([]types.AttributeType, error) {
+func (c *CognitoServiceImpl) GetUserAttributes(ctx context.Context, accessToken *string) ([]types.AttributeType, error) {
 	user, err := c.cognitoClient.GetUser(ctx, &cognitoidentityprovider.GetUserInput{AccessToken: accessToken})
 
 	if err != nil {
@@ -70,7 +77,7 @@ func (c *CognitoService) GetUserAttributes(ctx context.Context, accessToken *str
 	return user.UserAttributes, nil
 }
 
-func (c *CognitoService) UpdateUserAttributes(ctx context.Context, accessToken *string, attributes []types.AttributeType) error {
+func (c *CognitoServiceImpl) UpdateUserAttributes(ctx context.Context, accessToken *string, attributes []types.AttributeType) error {
 	_, err := c.cognitoClient.UpdateUserAttributes(ctx, &cognitoidentityprovider.UpdateUserAttributesInput{
 		AccessToken:    accessToken,
 		UserAttributes: attributes,
@@ -84,7 +91,7 @@ func (c *CognitoService) UpdateUserAttributes(ctx context.Context, accessToken *
 	return nil
 }
 
-func (c *CognitoService) GetUser(ctx context.Context, discordId *string) (*CognitoUser, error) {
+func (c *CognitoServiceImpl) GetUser(ctx context.Context, discordId *string) (*CognitoUser, error) {
 	user, err := c.cognitoClient.AdminGetUser(ctx, &cognitoidentityprovider.AdminGetUserInput{
 		UserPoolId: aws.String(c.userPoolID),
 		Username:   discordId,
@@ -119,7 +126,7 @@ func (c *CognitoService) GetUser(ctx context.Context, discordId *string) (*Cogni
 	}, nil
 }
 
-func (c *CognitoService) AuthUser(ctx context.Context, refreshToken, discordId *string) (*CognitoUser, error) {
+func (c *CognitoServiceImpl) AuthUser(ctx context.Context, refreshToken, discordId *string) (*CognitoUser, error) {
 	auth, err := c.cognitoClient.AdminInitiateAuth(ctx, &cognitoidentityprovider.AdminInitiateAuthInput{
 		UserPoolId: aws.String(c.userPoolID),
 		ClientId:   aws.String(c.clientID),

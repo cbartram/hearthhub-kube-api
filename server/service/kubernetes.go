@@ -74,14 +74,21 @@ func (p *PVCAction) Rollback(clientset *kubernetes.Clientset) (string, error) {
 	return p.PVC.Name, nil
 }
 
-type KubernetesService struct {
+type KubernetesService interface {
+	AddAction(action ResourceAction)
+	ApplyResources() error
+	GetActions() []ResourceAction
+	GetClient() kubernetes.Interface
+}
+
+type KubernetesServiceImpl struct {
 	Client          *kubernetes.Clientset
 	ResourceActions []ResourceAction
 }
 
 // MakeKubernetesService Creates a new kubernetes service object which intelligently loads configuration from
 // either in-cluster or local if in-cluster fails.
-func MakeKubernetesService() *KubernetesService {
+func MakeKubernetesService() KubernetesService {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		log.Infof("could not create in cluster config. Attempting to load local kube config: %v", err.Error())
@@ -96,17 +103,25 @@ func MakeKubernetesService() *KubernetesService {
 	if err != nil {
 		log.Fatalf("Error creating kubernetes client: %v", err)
 	}
-	return &KubernetesService{
+	return &KubernetesServiceImpl{
 		Client: clientset,
 	}
 }
 
-func (k *KubernetesService) AddAction(action ResourceAction) {
+func (k *KubernetesServiceImpl) GetClient() kubernetes.Interface {
+	return k.Client
+}
+
+func (k *KubernetesServiceImpl) GetActions() []ResourceAction {
+	return k.ResourceActions
+}
+
+func (k *KubernetesServiceImpl) AddAction(action ResourceAction) {
 	k.ResourceActions = append(k.ResourceActions, action)
 }
 
 // ApplyResources applies a list of resources and rolls them back on failure.
-func (k *KubernetesService) ApplyResources() error {
+func (k *KubernetesServiceImpl) ApplyResources() error {
 	for _, resource := range k.ResourceActions {
 		if name, err := resource.Apply(k.Client); err != nil {
 			log.Infof("Error applying resource: %s err: %v", name, err)

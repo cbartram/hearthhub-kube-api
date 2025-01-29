@@ -28,13 +28,6 @@ const (
 	MUCHMORE  = "muchmore"
 	MOST      = "most" // resource only
 
-	// Modifier Keys
-	COMBAT        = "combat"
-	DEATH_PENALTY = "deathpenalty"
-	RESOURCES     = "resources"
-	RAIDS         = "raids"
-	PORTALS       = "portals"
-
 	// Server states
 	RUNNING    = "running"
 	TERMINATED = "terminated"

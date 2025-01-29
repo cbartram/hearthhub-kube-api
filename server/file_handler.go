@@ -68,7 +68,7 @@ func (f *FilePayload) Validate() error {
 
 type InstallFileHandler struct{}
 
-func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService *service.KubernetesService, ctx context.Context) {
+func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService service.KubernetesService, ctx context.Context) {
 	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
@@ -77,12 +77,12 @@ func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService *service.
 	}
 
 	var reqBody FilePayload
-	if err := json.Unmarshal(bodyRaw, &reqBody); err != nil {
+	if err = json.Unmarshal(bodyRaw, &reqBody); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
 		return
 	}
 
-	if err := reqBody.Validate(); err != nil {
+	if err = reqBody.Validate(); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
 		return
 	}
@@ -94,7 +94,7 @@ func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService *service.
 	}
 	user := tmp.(*service.CognitoUser)
 
-	name, err := CreateFileJob(kubeService.Client, &reqBody, user)
+	name, err := CreateFileJob(kubeService.GetClient(), &reqBody, user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("could not create mod install job: %v", err)})
 		return
@@ -105,7 +105,7 @@ func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService *service.
 
 // CreateFileJob Creates a new kubernetes job which attaches the valheim server PVC, downloads mods from S3,
 // and installs mods onto the PVC before restarting the Valheim server.
-func CreateFileJob(clientset *kubernetes.Clientset, payload *FilePayload, user *service.CognitoUser) (*string, error) {
+func CreateFileJob(clientset kubernetes.Interface, payload *FilePayload, user *service.CognitoUser) (*string, error) {
 	fileName := filepath.Base(*payload.Prefix)
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{

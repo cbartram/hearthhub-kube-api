@@ -80,11 +80,11 @@ type CreateServerHandler struct{}
 // responsible for creating the initial deployment and pvc which in turn creates the replicaset and pod for the server.
 // Future server management like mod installation, user termination requests, custom world uploads, etc... will use
 // the /api/v1/server/scale route to scale the replicas to 0-1 without removing the deployment or PVC.
-func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService *service.KubernetesService, ctx context.Context) {
+func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService service.KubernetesService, ctx context.Context) {
 	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not read body from request: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "could not read body from request: " + err.Error()})
 		return
 	}
 
@@ -156,7 +156,7 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService *service
 }
 
 // CreateDedicatedServerDeployment Creates the valheim dedicated server deployment and pvc given the server configuration.
-func CreateDedicatedServerDeployment(config *Config, kubeService *service.KubernetesService, discordId string) (*CreateServerResponse, error) {
+func CreateDedicatedServerDeployment(config *Config, kubeService service.KubernetesService, discordId string) (*CreateServerResponse, error) {
 	serverArgs := config.ToStringArgs()
 	serverPort, _ := strconv.Atoi(config.Port)
 
@@ -265,8 +265,8 @@ func CreateDedicatedServerDeployment(config *Config, kubeService *service.Kubern
 		ServerIp:       ip,
 		ServerPort:     serverPort,
 		WorldDetails:   *config,
-		PvcName:        kubeService.ResourceActions[0].Name(),
-		DeploymentName: kubeService.ResourceActions[1].Name(),
+		PvcName:        kubeService.GetActions()[0].Name(),
+		DeploymentName: kubeService.GetActions()[1].Name(),
 		State:          RUNNING,
 	}, nil
 }

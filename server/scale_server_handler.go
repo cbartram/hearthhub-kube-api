@@ -20,7 +20,7 @@ type ScaleServerRequest struct {
 
 type ScaleServerHandler struct{}
 
-func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService *service.KubernetesService, ctx context.Context) {
+func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService service.KubernetesService, ctx context.Context) {
 	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
@@ -85,7 +85,7 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService *service.
 
 	// Scale down the deployment
 	deploymentName := fmt.Sprintf("valheim-%s", user.DiscordID)
-	scale, err := kubeService.Client.AppsV1().Deployments("hearthhub").GetScale(context.TODO(), deploymentName, metav1.GetOptions{})
+	scale, err := kubeService.GetClient().AppsV1().Deployments("hearthhub").GetScale(context.TODO(), deploymentName, metav1.GetOptions{})
 	if err != nil {
 		// TODO If deployment doesn't exist we are in a bad state and need to set cognito custom:server_details to "nil"
 		log.Errorf("failed to get deployment scale from kubernetes api: %v", err)
@@ -94,7 +94,7 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService *service.
 	}
 
 	scale.Spec.Replicas = *reqBody.Replicas
-	_, err = kubeService.Client.AppsV1().Deployments("hearthhub").UpdateScale(context.TODO(), deploymentName, scale, metav1.UpdateOptions{})
+	_, err = kubeService.GetClient().AppsV1().Deployments("hearthhub").UpdateScale(context.TODO(), deploymentName, scale, metav1.UpdateOptions{})
 	if err != nil {
 		log.Errorf("failed to update deployment scale: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to update deployment scale: %v", err)})
@@ -116,7 +116,7 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService *service.
 }
 
 // UpdateServerDetails Updates the custom:server_details field in Cognito with the information from the scaled server.
-func UpdateServerDetails(ctx context.Context, cognito *service.CognitoService, res *CreateServerResponse, user *service.CognitoUser, state string) (*CreateServerResponse, error) {
+func UpdateServerDetails(ctx context.Context, cognito service.CognitoService, res *CreateServerResponse, user *service.CognitoUser, state string) (*CreateServerResponse, error) {
 	res.State = state
 	s, _ := json.Marshal(res)
 	serverAttribute := util.MakeAttribute("custom:server_details", string(s))

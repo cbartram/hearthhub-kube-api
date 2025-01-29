@@ -25,7 +25,7 @@ func LogrusMiddleware(logger *logrus.Logger) gin.HandlerFunc {
 
 // AuthMiddleware is the custom authentication middleware that checks the Authorization header to ensure a given
 // discord id belong to a given refresh token.
-func AuthMiddleware(cognito *service.CognitoService) gin.HandlerFunc {
+func AuthMiddleware(cognito service.CognitoService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
@@ -62,6 +62,9 @@ func AuthMiddleware(cognito *service.CognitoService) gin.HandlerFunc {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("could not authenticate user with refresh token: %s", err)})
 			return
 		}
+
+		print("We got the user!: ", user)
+		print("error: ", err)
 
 		c.Set("user", user)
 		c.Next()
