@@ -59,7 +59,7 @@ Run the `./scripts/build_api.sh` to do the same for the API image.
 ### K3s
 
 [K3's](https://docs.k3s.io) is the preferred deployment option because:
-- You can skip the entire [Networking](#networking) section and omit the `tinyproxy` server since it runs natively on the host
+- You can skip the entire [Networking](#networking-minikube-only) section and omit the `tinyproxy` server since it runs natively on the host
 - You can add additional nodes to the cluster to scale horizontally
 - Does not require any type of additional tunneling to be present i.e. `minikube tunnel` in order to access from the internet
 
@@ -77,11 +77,14 @@ kubelet-arg:
 This ensures K3's uses at most 2 CPU core's and 8GB of memory to run leaving some resources for your host system. This is necessary since the
 cluster does not run in a VM and shares the host network space.
 
-Finally run: `./scripts/cluster_init.sh` to initialize the required ingress and load balancer controllers, namespaces, and secrets.
+Finally run: `./scripts/cluster_init.sh` to initialize the required ingress and load balancer controllers, namespaces, and secrets. See [Deploying
+the API](#deploying-valheim-server-and-hearthhub-api) for more information on how to deploy.
 
-### MiniKube
+### MiniKube (Deprecated)
 
-Deployment is managed through Helm and Minikube. Follow the [MiniKube setup guide](https://minikube.sigs.k8s.io/docs/start/) to the point where you have your cluster running.
+:warning: We do not recommend using MiniKube because of networking issues exposing the API to the internet. See [k3s instead](#k3s).
+
+Deployment can be managed through Helm and Minikube. Follow the [MiniKube setup guide](https://minikube.sigs.k8s.io/docs/start/) to the point where you have your cluster running.
 Install [Helm](https://helm.sh) using their [installation script](https://helm.sh/docs/intro/install/).
 
 Create the `hearthhub` namespace on your cluster with: `kubectl create ns hearthhub`. It's also useful to have the 
@@ -112,17 +115,29 @@ Finally, you should update your `/etc/hosts/` file with the DNS entry for your A
 ```
 
 :warning: For internet access to the API you will also need to deploy a `tinyproxy` or proxy service on a port of your choosing running on the host to proxy
-requests from the internet to the VM while the tunnel is running.
+requests from the internet to the VM while the tunnel is running. See [networking](#networking-minikube-only) for more information.
 
 ### Deploying Valheim Server and HearthHub API
-
-To deploy the hearthhub-mod-api run:
+To deploy the hearthhub-KUBE-api run:
 
 `helm install hearthhub-mod-api ./manifests/hearthhub-mod-api -f ./manifests/hearthhub-mod-api/values.yaml`
 
 The API comes with a service which exposes `NodePort` 30000 and can be accessed via: `http://localhost:30000/api/v1/health`
+The API is pre-configured with basic auth, and you can generate the auth value like so:
 
-The API is pre-configured with basic auth and as such it's recommended to create a `.env` file on your local system with the following:
+```shell
+AUTH_VALUE=$(echo <discord_id>:<refresh_token> | base64)
+
+curl -H "Authorization: Basic $AUTH_VALUE" -X GET http://localhost:30000/api/v1/health
+```
+
+### API Routes
+
+Coming soon.
+
+### Running Locally
+
+You can run this API locally but will need to create a `.env` file in the root of the project.
 
 ```dotenv
 COGNITO_CLIENT_SECRET=<cognito_secret>
@@ -133,24 +148,26 @@ AWS_SECRET_ACCESS_KEY=<aws_secret_access_key>
 AWS_ACCESS_KEY_ID=<aws_access_key_id>
 AWS_REGION=us-east-1
 
-BASIC_AUTH_PASSWORD=<basic_auth_password>
+CPU_REQUEST=1
+CPU_LIMIT=1
+MEMORY_REQUEST=4Gi
+MEMORY_LIMIT=4Gi
+
+VALHEIM_IMAGE_NAME=cbartram/hearthhub
+VALHEIM_IMAGE_VERSION=0.0.6
+BACKUP_MANAGER_IMAGE_NAME=cbartram/hearthhub-sidecar
+BACKUP_MANAGER_IMAGE_VERSION=0.0.4
+FILE_MANAGER_IMAGE_NAME=cbartram/hearthhub-plugin-manager
+FILE_MANAGER_IMAGE_VERSION=0.0.9
 ```
-
-Run `./scripts/cluster_init.sh` to scaffold all the namespaces and secrets necessary for the API to start.
-
-You can use `curl -H "Authorization: base64(hearthhub:basic_auth_password)" http://localhost:30000/api/v1/server/create` as an example
-to authenticate with the basic auth.
-
-### Running Locally
-
-You can run this API locally but will need to create a `.env` file in the root of the project. See [Deploying](#deploying-valheim-server-and-hearthhub-api)
-for more information on the `.env` file contents.
 
 Build the API with `go build -o main .` and run with `./main` The API will be running on: `http://localhost:8080`
 
 ## Networking (MiniKube only)
 
-This application was built and tested on [MiniKube](https://minikube.sigs.k8s.io). Minikube uses (usually) a Docker VM to run MiniKube which has its own network separate
+:warning: This application has been built and tested on [MiniKube](https://minikube.sigs.k8s.io) however, we strongly recommend using [K3s](https://k3s.io/)
+
+Minikube uses (by default) a Docker VM to run MiniKube which has its own network separate
 from your host machine. By running `minikube tunnel` it will forward services from your [MiniKube](https://minikube.sigs.k8s.io) network to your host network and **ONLY**
 your host network.
 
@@ -158,7 +175,7 @@ What this means is that if you have a service like this:
 
 ```shell
 NAME                TYPE           CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
-hearthhub-mod-api   LoadBalancer   10.99.134.178   127.0.0.1     8080:30616/TCP   9m41s
+hearthhub-kube-api   LoadBalancer   10.99.134.178   127.0.0.1     8080:30616/TCP   9m41s
 ```
 
 Then:

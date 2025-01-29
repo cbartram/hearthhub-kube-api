@@ -15,9 +15,7 @@ import (
 )
 
 type ScaleServerRequest struct {
-	DiscordId    string `json:"discord_id"`
-	RefreshToken string `json:"refresh_token,omitempty"`
-	Replicas     int32  `json:"replicas"`
+	Replicas int32 `json:"replicas"`
 }
 
 type ScaleServerHandler struct{}
@@ -41,17 +39,15 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService *service.
 		return
 	}
 
-	// Update user info in Cognito with valheim server data.
 	cognito := service.MakeCognitoService()
-	log.Infof("authenticating user with discord id: %s", reqBody.DiscordId)
-	user, err := cognito.AuthUser(ctx, &reqBody.RefreshToken, &reqBody.DiscordId)
-	if err != nil {
-		log.Errorf("could not authenticate user with refresh token: %v", err)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("could not authenticate user with refresh token: %s", err)})
+	tmp, exists := c.Get("user")
+	if !exists {
+		log.Errorf("user not found in context")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "user not found in context"})
 		return
 	}
 
-	log.Infof("user authenticated: %s", user.Email)
+	user := tmp.(*service.CognitoUser)
 
 	// Verify that server details is "nil". This avoids a scenario where a
 	// user could create more than 1 server.
@@ -83,7 +79,7 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService *service.
 	}
 
 	// Scale down the deployment
-	deploymentName := fmt.Sprintf("valheim-%s", reqBody.DiscordId)
+	deploymentName := fmt.Sprintf("valheim-%s", user.DiscordID)
 	scale, err := kubeService.Client.AppsV1().Deployments("hearthhub").GetScale(context.TODO(), deploymentName, metav1.GetOptions{})
 	if err != nil {
 		// TODO If deployment doesn't exist we are in a bad state and need to set cognito custom:server_details to "nil"
@@ -114,6 +110,7 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService *service.
 	c.JSON(http.StatusOK, s)
 }
 
+// UpdateServerDetails Updates the custom:server_details field in Cognito with the information from the scaled server.
 func UpdateServerDetails(ctx context.Context, cognito *service.CognitoService, server *ValheimDedicatedServer, user *service.CognitoUser, state string) (*ValheimDedicatedServer, error) {
 	server.State = state
 	s, _ := json.Marshal(server)

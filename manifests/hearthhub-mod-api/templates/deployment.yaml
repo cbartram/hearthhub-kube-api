@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: hearthhub-mod-api
+  name: {{.Values.name}}
   namespace: {{.Values.namespace}}
   labels:
-    app: hearthhub-mod-api
+    app: {{.Values.name}}
 spec:
   replicas: {{.Values.replicaCount}}
   selector:
     matchLabels:
-      app: hearthhub-mod-api
+      app: {{.Values.name}}
   template:
     metadata:
       labels:
-        app: hearthhub-mod-api
+        app: {{.Values.name}}
     spec:
       serviceAccountName: hearthhub-api-sa
       containers:
-        - name: hearthhub-mod-api
+        - name: main
           image: {{.Values.image.repository}}:{{.Values.image.tag}}
           imagePullPolicy: IfNotPresent
           args:

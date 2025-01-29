@@ -75,8 +75,6 @@ type ServerModifier struct {
 }
 
 type CreateServerRequest struct {
-	DiscordId       string           `json:"discord_id"`
-	RefreshToken    string           `json:"refresh_token,omitempty"`
 	Name            string           `json:"name"`
 	World           string           `json:"world"`
 	Password        string           `json:"password"`
@@ -115,17 +113,15 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService *service
 	}
 
 	// TODO Validate port, modifiers, etc...
-	// Update user info in Cognito with valheim server data.
 	cognito := service.MakeCognitoService()
-	log.Infof("authenticating user with discord id: %s", reqBody.DiscordId)
-	user, err := cognito.AuthUser(ctx, &reqBody.RefreshToken, &reqBody.DiscordId)
-	if err != nil {
-		log.Errorf("could not authenticate user with refresh token: %v", err)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("could not authenticate user with refresh token: %s", err)})
+	tmp, exists := c.Get("user")
+	if !exists {
+		log.Errorf("user not found in context")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "user not found in context"})
 		return
 	}
 
-	log.Infof("user authenticated: %s", user.Email)
+	user := tmp.(*service.CognitoUser)
 
 	// Verify that server details is "nil". This avoids a scenario where a
 	// user could create more than 1 server.
@@ -147,7 +143,7 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService *service
 	}
 
 	config := MakeServerConfigWithDefaults(reqBody.Name, reqBody.World, reqBody.Password, reqBody.EnableCrossplay, reqBody.Public, reqBody.Modifiers)
-	valheimServer, err := CreateDedicatedServerDeployment(config, kubeService, &reqBody)
+	valheimServer, err := CreateDedicatedServerDeployment(config, kubeService, &reqBody, user.DiscordID)
 	if err != nil {
 		log.Errorf("could not create dedicated server deployment: %s", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create dedicated server deployment: " + err.Error()})
@@ -190,9 +186,8 @@ func MakeServerConfigWithDefaults(name, world, password string, crossplay bool, 
 }
 
 // CreateDedicatedServerDeployment Creates the valheim dedicated server deployment and pvc given the server configuration.
-func CreateDedicatedServerDeployment(serverConfig *ServerConfig, kubeService *service.KubernetesService, request *CreateServerRequest) (*ValheimDedicatedServer, error) {
+func CreateDedicatedServerDeployment(serverConfig *ServerConfig, kubeService *service.KubernetesService, request *CreateServerRequest, discordId string) (*ValheimDedicatedServer, error) {
 	// Ensures the refresh token doesn't get echo'd in the response
-	request.RefreshToken = ""
 	serverArgs := []string{
 		"./valheim_server.x86_64",
 		"-name",
@@ -231,8 +226,8 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, kubeService *se
 
 	// Deployments & PVC are always tied to the discord ID. When a server is terminated and re-created it
 	// will be made with a different pod name but the same deployment name making for easy replica scaling.
-	pvcName := fmt.Sprintf("valheim-pvc-%s", request.DiscordId)
-	deploymentName := fmt.Sprintf("valheim-%s", request.DiscordId)
+	pvcName := fmt.Sprintf("valheim-pvc-%s", discordId)
+	deploymentName := fmt.Sprintf("valheim-%s", discordId)
 
 	log.Infof("server args: %v", serverArgs)
 
@@ -257,7 +252,7 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, kubeService *se
 					Labels: map[string]string{
 						"app":               "valheim",
 						"created-by":        deploymentName,
-						"tenant-discord-id": request.DiscordId,
+						"tenant-discord-id": discordId,
 					},
 				},
 				Spec: corev1.PodSpec{
@@ -316,7 +311,7 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, kubeService *se
 		},
 	}
 
-	kubeService.AddAction(&service.PVCAction{PVC: MakePvc(pvcName, deploymentName, request.DiscordId)})
+	kubeService.AddAction(&service.PVCAction{PVC: MakePvc(pvcName, deploymentName, discordId)})
 	kubeService.AddAction(&service.DeploymentAction{Deployment: deployment})
 
 	err := kubeService.ApplyResources()

@@ -20,12 +20,10 @@ import (
 )
 
 type FilePayload struct {
-	DiscordId    string `json:"discord_id"`
-	RefreshToken string `json:"refresh_token"`
-	Prefix       string `json:"prefix"`
-	Destination  string `json:"destination"`
-	IsArchive    bool   `json:"is_archive"`
-	Operation    string `json:"operation"`
+	Prefix      string `json:"prefix"`
+	Destination string `json:"destination"`
+	IsArchive   bool   `json:"is_archive"`
+	Operation   string `json:"operation"`
 }
 
 type InstallFileHandler struct{}
@@ -44,7 +42,14 @@ func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService *service.
 		return
 	}
 
-	name, err := CreateFileJob(kubeService.Client, &reqBody)
+	tmp, exists := c.Get("user")
+	if !exists {
+		log.Errorf("user not found in context")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found in context"})
+	}
+	user := tmp.(*service.CognitoUser)
+
+	name, err := CreateFileJob(kubeService.Client, &reqBody, user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("could not create mod install job: %v", err)})
 		return
@@ -55,13 +60,13 @@ func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService *service.
 
 // CreateFileJob Creates a new kubernetes job which attaches the valheim server PVC, downloads mods from S3,
 // and installs mods onto the PVC before restarting the Valheim server.
-func CreateFileJob(clientset *kubernetes.Clientset, payload *FilePayload) (*string, error) {
+func CreateFileJob(clientset *kubernetes.Clientset, payload *FilePayload, user *service.CognitoUser) (*string, error) {
 	fileName := filepath.Base(payload.Prefix)
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: fmt.Sprintf("mod-install-%s-", payload.DiscordId),
+			GenerateName: fmt.Sprintf("mod-install-%s-", user.DiscordID),
 			Labels: map[string]string{
-				"tenant-discord-id": payload.DiscordId,
+				"tenant-discord-id": user.DiscordID,
 				"file-name":         fileName,
 			},
 			Namespace: "hearthhub",
@@ -76,9 +81,9 @@ func CreateFileJob(clientset *kubernetes.Clientset, payload *FilePayload) (*stri
 							Args: []string{
 								"./plugin-manager",
 								"-discord_id",
-								payload.DiscordId,
+								user.DiscordID,
 								"-refresh_token",
-								payload.RefreshToken,
+								user.Credentials.RefreshToken,
 								"-prefix",
 								payload.Prefix,
 								"-destination",
@@ -126,7 +131,7 @@ func CreateFileJob(clientset *kubernetes.Clientset, payload *FilePayload) (*stri
 						},
 					},
 					RestartPolicy: corev1.RestartPolicyNever,
-					Volumes:       MakeVolumes(fmt.Sprintf("valheim-pvc-%s", payload.DiscordId)),
+					Volumes:       MakeVolumes(fmt.Sprintf("valheim-pvc-%s", user.DiscordID)),
 				},
 			},
 		},

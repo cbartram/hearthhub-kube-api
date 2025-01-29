@@ -1,12 +1,13 @@
-replicaCount: 1
+name: hearthhub-kube-api
 namespace: hearthhub
+replicaCount: 1
 
 image:
   repository: cbartram/hearthhub-mod-api
   pullPolicy: IfNotPresent
 
   # Tag for the API itself
-  tag: "0.0.20"
+  tag: "0.0.21"
 
   # Versions for images the API is responsible for deploying
   # i.e. sidecar container, valheim server, and mod/file manager
@@ -15,7 +16,7 @@ image:
   backupManagerImageName: "cbartram/hearthhub-sidecar"
   backupManagerImageVersion: "0.0.4"
   fileManagerImageName: "cbartram/hearthhub-plugin-manager"
-  fileManagerImageVersion: "0.0.8"
+  fileManagerImageVersion: "0.0.9"
 
 imagePullSecrets: []
 nameOverride: ""

@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: server-config
-  namespace: hearthhub
+  namespace: {{.Values.namespace}}
 data:
   # Versions and images for containers the API is responsible
   # for deploying

@@ -10,18 +10,7 @@ import (
 	"os"
 )
 
-func LogrusMiddleware(logger *logrus.Logger) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if c.Request.URL.Path != "/api/v1/health" {
-			logger.WithFields(logrus.Fields{
-				"user-agent": c.Request.UserAgent(),
-				"error":      c.Errors.ByType(gin.ErrorTypePrivate).String(),
-			}).Infof("[%s] %s: ", c.Request.Method, c.Request.URL.Path)
-		}
-		c.Next()
-	}
-}
-
+// NewRouter Create a new gin router and instantiates the routes and route handlers for the entire API.
 func NewRouter(ctx context.Context) *gin.Engine {
 	logger := logrus.New()
 	logger.SetFormatter(&logrus.TextFormatter{
@@ -42,17 +31,17 @@ func NewRouter(ctx context.Context) *gin.Engine {
 	gin.DefaultErrorWriter = logger.Writer()
 	gin.SetMode(gin.ReleaseMode)
 
-	r.Use(LogrusMiddleware(logger))
-
 	kubeService := service.MakeKubernetesService()
-
-	basicAuth := gin.BasicAuth(gin.Accounts{
-		"hearthhub": os.Getenv("BASIC_AUTH_PASSWORD"),
-	})
+	cognitoService := service.MakeCognitoService()
 
 	apiGroup := r.Group("/api/v1")
-	serverGroup := apiGroup.Group("/server", basicAuth)
-	modGroup := apiGroup.Group("/file", basicAuth)
+	serverGroup := apiGroup.Group("/server")
+	modGroup := apiGroup.Group("/file")
+
+	// Setup middleware
+	r.Use(LogrusMiddleware(logger))
+	serverGroup.Use(AuthMiddleware(cognitoService))
+	modGroup.Use(AuthMiddleware(cognitoService))
 
 	apiGroup.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
