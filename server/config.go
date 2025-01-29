@@ -5,6 +5,41 @@ import (
 	"strconv"
 )
 
+const (
+	//Combat: veryeasy, easy, hard, veryhard
+	//DeathPenalty: casual, veryeasy, easy, hard, hardcore
+	//Resources: muchless, less, more, muchmore, most
+	//Raids: none, muchless, less, more, muchmore
+	//Portals: casual, hard, veryhard
+
+	// Difficulties & Death penalties
+	VERY_EASY = "veryeasy"
+	EASY      = "easy"
+	HARD      = "hard"     // only valid for portals
+	VERY_HARD = "veryhard" // combat only & only valid for portals
+	CASUAL    = "casual"   // only valid for portals
+	HARDCORE  = "hardcore" // deathpenalty only
+
+	// Resources & Raids
+	NONE      = "none" // Raid only
+	MUCH_LESS = "muchless"
+	LESS      = "less"
+	MORE      = "more"
+	MUCHMORE  = "muchmore"
+	MOST      = "most" // resource only
+
+	// Modifier Keys
+	COMBAT        = "combat"
+	DEATH_PENALTY = "deathpenalty"
+	RESOURCES     = "resources"
+	RAIDS         = "raids"
+	PORTALS       = "portals"
+
+	// Server states
+	RUNNING    = "running"
+	TERMINATED = "terminated"
+)
+
 type Config struct {
 	Name                  string     `json:"name"`
 	World                 string     `json:"world"`

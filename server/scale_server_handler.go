@@ -15,7 +15,7 @@ import (
 )
 
 type ScaleServerRequest struct {
-	Replicas int32 `json:"replicas"`
+	Replicas *int32 `json:"replicas"`
 }
 
 type ScaleServerHandler struct{}
@@ -34,7 +34,12 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService *service.
 		return
 	}
 
-	if reqBody.Replicas > 1 || reqBody.Replicas < 0 {
+	if reqBody.Replicas == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "replicas field required"})
+		return
+	}
+
+	if *reqBody.Replicas > 1 || *reqBody.Replicas < 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "replicas must be either 1 or 0"})
 		return
 	}
@@ -68,12 +73,12 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService *service.
 
 	json.Unmarshal([]byte(serverJson), &server)
 
-	if server.State == RUNNING && reqBody.Replicas == 1 {
+	if server.State == RUNNING && *reqBody.Replicas == 1 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "server already running. replicas must be 0 when server state is: RUNNING"})
 		return
 	}
 
-	if server.State == TERMINATED && reqBody.Replicas == 0 {
+	if server.State == TERMINATED && *reqBody.Replicas == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "no server to terminate. replicas must be 1 when server state is: TERMINATED"})
 		return
 	}
@@ -88,7 +93,7 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService *service.
 		return
 	}
 
-	scale.Spec.Replicas = reqBody.Replicas
+	scale.Spec.Replicas = *reqBody.Replicas
 	_, err = kubeService.Client.AppsV1().Deployments("hearthhub").UpdateScale(context.TODO(), deploymentName, scale, metav1.UpdateOptions{})
 	if err != nil {
 		log.Errorf("failed to update deployment scale: %v", err)
@@ -97,7 +102,7 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService *service.
 	}
 
 	state := TERMINATED
-	if reqBody.Replicas == 1 {
+	if *reqBody.Replicas == 1 {
 		state = RUNNING
 	}
 	s, err := UpdateServerDetails(ctx, cognito, &server, user, state)

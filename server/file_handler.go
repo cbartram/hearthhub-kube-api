@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/cbartram/hearthhub-mod-api/server/service"
 	"github.com/gin-gonic/gin"
@@ -20,10 +21,49 @@ import (
 )
 
 type FilePayload struct {
-	Prefix      string `json:"prefix"`
-	Destination string `json:"destination"`
-	IsArchive   bool   `json:"is_archive"`
-	Operation   string `json:"operation"`
+	Prefix      *string `json:"prefix"`
+	Destination string  `json:"destination"`
+	IsArchive   bool    `json:"is_archive"`
+	Operation   string  `json:"operation"`
+}
+
+// Validate Validates that the payload provide is not malformed or missing information.
+func (f *FilePayload) Validate() error {
+	validDestinations := []string{
+		"/root/.config/unity3d/IronGate/Valheim/worlds_local",
+		"/valheim/BepInEx/config",
+		"/valheim/BepInEx/plugins",
+	}
+
+	validDestination := false
+	for _, dest := range validDestinations {
+		if f.Destination == dest {
+			validDestination = true
+			break
+		}
+	}
+	if !validDestination {
+		return errors.New("invalid destination: must be one of /root/.config/unity3d/IronGate/Valheim/worlds_local, /valheim/BepInEx/config, or /valheim/BepInEx/plugins")
+	}
+
+	// Validate Operation
+	validOperations := []string{"write", "delete"}
+	validOperation := false
+	for _, op := range validOperations {
+		if f.Operation == op {
+			validOperation = true
+			break
+		}
+	}
+	if !validOperation {
+		return errors.New("invalid operation: must be either 'write' or 'delete'")
+	}
+
+	if f.Prefix == nil {
+		return errors.New("prefix is required and cannot be empty")
+	}
+
+	return nil
 }
 
 type InstallFileHandler struct{}
@@ -38,6 +78,11 @@ func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService *service.
 
 	var reqBody FilePayload
 	if err := json.Unmarshal(bodyRaw, &reqBody); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+		return
+	}
+
+	if err := reqBody.Validate(); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
 		return
 	}
@@ -61,7 +106,7 @@ func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService *service.
 // CreateFileJob Creates a new kubernetes job which attaches the valheim server PVC, downloads mods from S3,
 // and installs mods onto the PVC before restarting the Valheim server.
 func CreateFileJob(clientset *kubernetes.Clientset, payload *FilePayload, user *service.CognitoUser) (*string, error) {
-	fileName := filepath.Base(payload.Prefix)
+	fileName := filepath.Base(*payload.Prefix)
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: fmt.Sprintf("mod-install-%s-", user.DiscordID),
@@ -85,7 +130,7 @@ func CreateFileJob(clientset *kubernetes.Clientset, payload *FilePayload, user *
 								"-refresh_token",
 								user.Credentials.RefreshToken,
 								"-prefix",
-								payload.Prefix,
+								*payload.Prefix,
 								"-destination",
 								payload.Destination,
 								"-op",

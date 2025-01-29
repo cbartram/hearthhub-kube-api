@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 	"github.com/cbartram/hearthhub-mod-api/server/service"
@@ -19,41 +20,6 @@ import (
 	"strconv"
 )
 
-const (
-	//Combat: veryeasy, easy, hard, veryhard
-	//DeathPenalty: casual, veryeasy, easy, hard, hardcore
-	//Resources: muchless, less, more, muchmore, most
-	//Raids: none, muchless, less, more, muchmore
-	//Portals: casual, hard, veryhard
-
-	// Difficulties & Death penalties
-	VERY_EASY = "veryeasy"
-	EASY      = "easy"
-	HARD      = "hard"     // only valid for portals
-	VERY_HARD = "veryhard" // combat only & only valid for portals
-	CASUAL    = "casual"   // only valid for portals
-	HARDCORE  = "hardcore" // deathpenalty only
-
-	// Resources & Raids
-	NONE      = "none" // Raid only
-	MUCH_LESS = "muchless"
-	LESS      = "less"
-	MORE      = "more"
-	MUCHMORE  = "muchmore"
-	MOST      = "most" // resource only
-
-	// Modifier Keys
-	COMBAT        = "combat"
-	DEATH_PENALTY = "deathpenalty"
-	RESOURCES     = "resources"
-	RAIDS         = "raids"
-	PORTALS       = "portals"
-
-	// Server states
-	RUNNING    = "running"
-	TERMINATED = "terminated"
-)
-
 type CreateServerRequest struct {
 	Name                  *string    `json:"name"`
 	World                 *string    `json:"world"`
@@ -66,6 +32,37 @@ type CreateServerRequest struct {
 	BackupCount           *int       `json:"backup_count,omitempty"`
 	InitialBackupSeconds  *int       `json:"initial_backup_seconds,omitempty"`
 	BackupIntervalSeconds *int       `json:"backup_interval_seconds,omitempty"`
+}
+
+func (c *CreateServerRequest) Validate() error {
+	if c.Name == nil || c.World == nil || c.Password == nil {
+		return errors.New("missing required fields name, world, or password")
+	}
+
+	var validModifiers = map[string][]string{
+		"combat":       {VERY_EASY, EASY, HARD, VERY_HARD},
+		"deathPenalty": {CASUAL, VERY_EASY, EASY, HARD, HARDCORE},
+		"resources":    {MUCH_LESS, LESS, MORE, MUCHMORE, MOST},
+		"raids":        {NONE, MUCH_LESS, LESS, MORE, MUCHMORE},
+		"portals":      {CASUAL, HARD, VERY_HARD},
+	}
+
+	for _, modifier := range c.Modifiers {
+		validValues, exists := validModifiers[modifier.ModifierKey]
+		if !exists {
+			return fmt.Errorf("invalid modifier key: \"%s\"", modifier.ModifierKey)
+		}
+
+		for _, validValue := range validValues {
+			if modifier.ModifierValue == validValue {
+				return nil // Valid value found
+			}
+		}
+
+		return fmt.Errorf("invalid value for modifier \"%s\": \"%s\" valid values are: \"%v\"", modifier.ModifierKey, modifier.ModifierValue, validModifiers[modifier.ModifierKey])
+	}
+
+	return nil
 }
 
 type CreateServerResponse struct {
@@ -97,12 +94,12 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService *service
 		return
 	}
 
-	if reqBody.Name == nil || reqBody.World == nil || reqBody.Password == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: name, world, and password are required fields."})
+	err = reqBody.Validate()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid request body: %s", err)})
 		return
 	}
 
-	// TODO Validate port, modifiers, etc...
 	cognito := service.MakeCognitoService()
 	tmp, exists := c.Get("user")
 	if !exists {
