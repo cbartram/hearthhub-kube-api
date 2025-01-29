@@ -15,7 +15,7 @@ image:
   backupManagerImageName: "cbartram/hearthhub-sidecar"
   backupManagerImageVersion: "0.0.4"
   fileManagerImageName: "cbartram/hearthhub-plugin-manager"
-  fileManagerImageVersion: "0.0.5"
+  fileManagerImageVersion: "0.0.6"
 
 imagePullSecrets: []
 nameOverride: ""

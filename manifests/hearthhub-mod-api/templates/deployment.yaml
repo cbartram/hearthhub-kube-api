@@ -29,8 +29,10 @@ spec:
                 name: cognito-secrets
             - secretRef:
                 name: aws-creds
+            - secretRef:
+                name: basic-auth
             - configMapRef:
-                name: server-resource-config
+                name: server-config
           ports:
             - containerPort: {{.Values.service.targetPort}}
           resources:

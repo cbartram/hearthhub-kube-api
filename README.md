@@ -1,11 +1,27 @@
-# HearthHub Mod API
+<p align="center">
+   <img src="./resources/logo.webp" height="300" width="400">
+</p>
 
-An API running on the dedicated linux machine for interfacing with the Valheim server. This repository
-contains a docker image which runs the Valheim server. Unlike the docker image that comes pre-packaged with the Valheim
+[![Contributors][contributors-shield]][contributors-url]
+[![Forks][forks-shield]][forks-url]
+[![Stargazers][stars-shield]][stars-url]
+[![Issues][issues-shield]][issues-url]
+[![MIT License][license-shield]][license-url]
+
+# HearthHub Kube API
+
+An API running on the dedicated linux machine for interfacing between the internet and Kubernetes. This repository
+contains a docker image which runs the Valheim server on Kubernetes. Unlike the docker image that comes pre-packaged with the Valheim
 dedicated server this image installs the server directly onto the image rather than running a separate 
-script in a generic ubuntu image. It also pre-packages BepInEx and configures it for use within the server
+script in a generic ubuntu image. It also pre-installs BepInEx on the server, sets up a PVC, and has routes to configure:
 
-This means that the dedicated server arguments (i.e world name, password, crossplay etc...) can be modified when the image is deployed or run.
+- Mod installation
+- Mod removal
+- Automated world backups (to s3)
+- Configuration installation for mods
+- Existing World uploads
+
+all directly on the Valheim Dedicated Server!
 
 ## Architecture
 
@@ -98,54 +114,41 @@ Finally, you should update your `/etc/hosts/` file with the DNS entry for your A
 :warning: For internet access to the API you will also need to deploy a `tinyproxy` or proxy service on a port of your choosing running on the host to proxy
 requests from the internet to the VM while the tunnel is running.
 
-### Deploying Valheim and HearthHub API
-To deploy the dedicated server run:
-
-`helm install valheim-server ./manifests/valheim-server -f ./manifests/valheim-server/values.yaml`
-
-You can override specific configuration like game world name, server name, and password with the helm `--set` command.
+### Deploying Valheim Server and HearthHub API
 
 To deploy the hearthhub-mod-api run:
 
 `helm install hearthhub-mod-api ./manifests/hearthhub-mod-api -f ./manifests/hearthhub-mod-api/values.yaml`
 
-## Running
+The API comes with a service which exposes `NodePort` 30000 and can be accessed via: `http://localhost:30000/api/v1/health`
 
-Before you can actually make requests to the API you need to run `minikube tunnel` in a separate terminal window and **keep it open**.
-This ensures that requests can be correctly proxied to the cluster from the local machine.
+The API is pre-configured with basic auth and as such it's recommended to create a `.env` file on your local system with the following:
 
-Check the API is running with: `curl http://hearthhub-api.example/api/v1/health` You should see: `{"status": "OK"}`
+```dotenv
+COGNITO_CLIENT_SECRET=<cognito_secret>
+COGNITO_CLIENT_ID=<cognito_client_id>
+USER_POOL_ID=<user_pool_id>
+
+AWS_SECRET_ACCESS_KEY=<aws_secret_access_key>
+AWS_ACCESS_KEY_ID=<aws_access_key_id>
+AWS_REGION=us-east-1
+
+BASIC_AUTH_PASSWORD=<basic_auth_password>
+```
+
+Run `./scripts/cluster_init.sh` to scaffold all the namespaces and secrets necessary for the API to start.
+
+You can use `curl -H "Authorization: base64(hearthhub:basic_auth_password)" http://localhost:30000/api/v1/server/create` as an example
+to authenticate with the basic auth.
 
 ### Running Locally
 
-You can run this API locally but will need to create a `.env` file in the root of the project. The `.env` file should
-have the following env vars set:
-
-```shell
-# CPU & Mem requests and limits for the dedicated server that will be created
-CPU_REQUEST=1
-CPU_LIMIT=1
-MEMORY_REQUEST=4Gi
-MEMORY_LIMIT=4Gi
-
-# Valheim image conf
-VALHEIM_IMAGE_NAME=<YOUR VALHEIM SERVER IMAGE built from Dockerfile in this repo>
-VALHEIM_IMAGE_VERSION=<YOUR VALHEIM Server image version i.e. 0.0.1>
-
-# Cognito Conf
-COGNITO_CLIENT_ID=<YOUR_COGNITO_CLIENT_ID>
-COGNITO_CLIENT_SECRET=<YOUR_COGNITO_SECRET>
-USER_POOL_ID=<YOUR_USER_POOL_ID>
-
-# AWS SDK conf
-AWS_SECRET_ACCESS_KEY=<YOUR_AWS_SECRET_KEY>
-AWS_ACCESS_KEY_ID=<YOUR_AWS_ACCESS_KEY>
-AWS_REGION=us-east-1
-```
+You can run this API locally but will need to create a `.env` file in the root of the project. See [Deploying](#deploying-valheim-server-and-hearthhub-api)
+for more information on the `.env` file contents.
 
 Build the API with `go build -o main .` and run with `./main` The API will be running on: `http://localhost:8080`
 
-## Networking
+## Networking (MiniKube only)
 
 This application was built and tested on [MiniKube](https://minikube.sigs.k8s.io). Minikube uses (usually) a Docker VM to run MiniKube which has its own network separate
 from your host machine. By running `minikube tunnel` it will forward services from your [MiniKube](https://minikube.sigs.k8s.io) network to your host network and **ONLY**
@@ -197,7 +200,8 @@ flowchart LR
 ```shell
 minikube start --cpus 3 --memory 8192q
 
-# In a new window
+# In a new window (necessary to expose services in the cluster VM to your host)
+# so the proxy can reach your API.
 minikube tunnel
 
 sudo systemctl start tinyproxy
@@ -226,11 +230,21 @@ repository](https://github.com/cbartran/hearthhub-mod-api/tags).
 
 ## Authors
 
-- **cbartram** - *Initial work* -
-  [cbartram](https://github.com/cbartram)
+- **cbartram** - *Initial work* - [cbartram](https://github.com/cbartram)
 
 ## License
 
 This project is licensed under the [CC0 1.0 Universal](LICENSE)
 Creative Commons License - see the [LICENSE.md](LICENSE) file for
 details
+
+[contributors-shield]: https://img.shields.io/github/contributors/cbartram/hearthhub-kube-api.svg?style=for-the-badge
+[contributors-url]: https://github.com/cbartram/hearthhub-kube-api/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/cbartram/hearthhub-kube-api.svg?style=for-the-badge
+[forks-url]: https://github.com/cbartram/hearthhub-kube-api/network/members
+[stars-shield]: https://img.shields.io/github/stars/cbartram/hearthhub-kube-api.svg?style=for-the-badge
+[stars-url]: https://github.com/cbartram/hearthhub-kube-api/stargazers
+[issues-shield]: https://img.shields.io/github/issues/cbartram/hearthhub-kube-api.svg?style=for-the-badge
+[issues-url]: https://github.com/cbartram/hearthhub-kube-api/issues
+[license-shield]: https://img.shields.io/github/license/cbartram/hearthhub-kube-api.svg?style=for-the-badge
+[license-url]: https://github.com/cbartram/hearthhub-kube-api/blob/master/LICENSE

@@ -325,8 +325,13 @@ func CreateDedicatedServerDeployment(serverConfig *ServerConfig, kubeService *se
 		return nil, err
 	}
 
+	ip, err := util.GetPublicIP()
+	if err != nil {
+		log.Errorf("failed to get public ip: %v", err)
+	}
+
 	return &ValheimDedicatedServer{
-		ServerIp:       "", // TODO Use a get request to determine current public ip of host.
+		ServerIp:       ip,
 		ServerPort:     serverPort,
 		WorldDetails:   *request,
 		PvcName:        kubeService.ResourceActions[0].Name(),

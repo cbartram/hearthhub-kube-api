@@ -4,9 +4,12 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
+	"io"
 	"math/rand"
+	"net/http"
 	"time"
 )
 
@@ -58,4 +61,22 @@ func MakeCognitoSecretHash(userId, clientId, clientSecret string) string {
 	digest := hash.Sum(nil)
 
 	return base64.StdEncoding.EncodeToString(digest)
+}
+
+// GetPublicIP Returns the public WAN IP address for the device
+func GetPublicIP() (string, error) {
+	// Use a third-party service to get the public IP
+	resp, err := http.Get("https://api.ipify.org?format=text")
+	if err != nil {
+		return "", fmt.Errorf("failed to get public IP: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Read the response body
+	ip, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	return string(ip), nil
 }
