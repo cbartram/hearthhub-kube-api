@@ -41,7 +41,7 @@ func (c *CreateServerRequest) Validate() error {
 
 	var validModifiers = map[string][]string{
 		"combat":       {VERY_EASY, EASY, HARD, VERY_HARD},
-		"deathPenalty": {CASUAL, VERY_EASY, EASY, HARD, HARDCORE},
+		"deathpenalty": {CASUAL, VERY_EASY, EASY, HARD, HARDCORE}, // TODO unsure if this is camel or all lowercase
 		"resources":    {MUCH_LESS, LESS, MORE, MUCHMORE, MOST},
 		"raids":        {NONE, MUCH_LESS, LESS, MORE, MUCHMORE},
 		"portals":      {CASUAL, HARD, VERY_HARD},

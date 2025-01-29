@@ -38,7 +38,6 @@ flowchart TD
     
     subgraph Kubernetes Cluster
         B
-        C
         D
         E
         F
