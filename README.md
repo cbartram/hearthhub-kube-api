@@ -1,5 +1,5 @@
 <p align="center">
-   <img src="./resources/logo.webp" height="300" width="400">
+   <img src="./resources/logo.webp" height="300" width="300">
 </p>
 
 [![Contributors][contributors-shield]][contributors-url]
@@ -198,7 +198,7 @@ flowchart LR
 ### TLDR
 
 ```shell
-minikube start --cpus 3 --memory 8192q
+minikube start --cpus 3 --memory 8192
 
 # In a new window (necessary to expose services in the cluster VM to your host)
 # so the proxy can reach your API.

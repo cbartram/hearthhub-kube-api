@@ -104,6 +104,13 @@ func CreateFileJob(clientset *kubernetes.Clientset, payload *FilePayload) (*stri
 										},
 									},
 								},
+								{
+									SecretRef: &corev1.SecretEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "basic-auth",
+										},
+									},
+								},
 							},
 							VolumeMounts: MakeVolumeMounts(),
 							Resources: corev1.ResourceRequirements{
