@@ -42,6 +42,11 @@ func (f *FakeKubeClient) GetClient() kubernetes.Interface {
 	return fake.NewClientset()
 }
 
+func (f *FakeKubeClient) GetClusterIp() (string, error) {
+	args := f.Called()
+	return args.String(0), args.Error(1)
+}
+
 func TestHandleCreateServerRoute(t *testing.T) {
 	tests := []struct {
 		name                 string
@@ -55,13 +60,12 @@ func TestHandleCreateServerRoute(t *testing.T) {
 		requiresCognito      bool
 		cognitoAttributes    []types.AttributeType
 		cognitoAttributesErr error
+		cognitoUpdateErr     error
 		requiresKube         bool
 		kubeErr              error
 	}{
 		{
 			name:            "Bad request body",
-			method:          "POST",
-			path:            "/create-server",
 			requiresUser:    false,
 			requiresCognito: false,
 			expectedStatus:  http.StatusBadRequest,
@@ -70,8 +74,6 @@ func TestHandleCreateServerRoute(t *testing.T) {
 		},
 		{
 			name:            "Fails input validation",
-			method:          "POST",
-			path:            "/create-server",
 			requiresUser:    false,
 			requiresCognito: false,
 			expectedStatus:  http.StatusBadRequest,
@@ -80,8 +82,6 @@ func TestHandleCreateServerRoute(t *testing.T) {
 		},
 		{
 			name:            "No user in context",
-			method:          "POST",
-			path:            "/create-server",
 			expectedStatus:  http.StatusInternalServerError,
 			requiresUser:    false,
 			requiresCognito: false,
@@ -90,8 +90,6 @@ func TestHandleCreateServerRoute(t *testing.T) {
 		},
 		{
 			name:           "Fails to get user attributes",
-			method:         "POST",
-			path:           "/create-server",
 			expectedStatus: http.StatusUnauthorized,
 			requiresUser:   true,
 			cognitoUser: &service.CognitoUser{
@@ -118,8 +116,6 @@ func TestHandleCreateServerRoute(t *testing.T) {
 		},
 		{
 			name:           "User already has Valheim server running",
-			method:         "POST",
-			path:           "/create-server",
 			expectedStatus: http.StatusBadRequest,
 			requiresUser:   true,
 			cognitoUser: &service.CognitoUser{
@@ -146,8 +142,6 @@ func TestHandleCreateServerRoute(t *testing.T) {
 		},
 		{
 			name:            "Fails to create dedicated server deployment",
-			method:          "POST",
-			path:            "/create-server",
 			expectedStatus:  http.StatusInternalServerError,
 			requiresUser:    true,
 			requiresCognito: true,
@@ -164,7 +158,7 @@ func TestHandleCreateServerRoute(t *testing.T) {
 				},
 			},
 			requestBody:  bytes.NewBuffer([]byte(`{"world": "foo", "name": "bar", "password": "hereisapassword"}`)),
-			expectedBody: `{"error":"failed to apply kubernetes resource: cannot validate manifest"}`,
+			expectedBody: `{"error":"could not create dedicated server deployment: cannot validate manifest"}`,
 			cognitoAttributes: []types.AttributeType{
 				{
 					Name:  stringPtr("custom:server_details"),
@@ -173,6 +167,64 @@ func TestHandleCreateServerRoute(t *testing.T) {
 			},
 			cognitoAttributesErr: nil,
 			kubeErr:              errors.New("cannot validate manifest"),
+		},
+		{
+			name:            "Fails to update user attributes",
+			expectedStatus:  http.StatusUnauthorized,
+			requiresUser:    true,
+			requiresCognito: true,
+			requiresKube:    true,
+			cognitoUser: &service.CognitoUser{
+				CognitoID:       "abc",
+				DiscordUsername: "123",
+				Email:           "foobar",
+				DiscordID:       "123abc",
+				AccountEnabled:  true,
+				Credentials: service.CognitoCredentials{
+					AccessToken:  "abc",
+					RefreshToken: "def",
+				},
+			},
+			requestBody:  bytes.NewBuffer([]byte(`{"world": "foo", "name": "bar", "password": "hereisapassword"}`)),
+			expectedBody: `{"error":"failed to update server details in cognito user attribute: cannot update manifest"}`,
+			cognitoAttributes: []types.AttributeType{
+				{
+					Name:  stringPtr("custom:server_details"),
+					Value: stringPtr("nil"),
+				},
+			},
+			cognitoAttributesErr: nil,
+			kubeErr:              nil,
+			cognitoUpdateErr:     errors.New("cannot update manifest"),
+		},
+		{
+			name:            "Status OK",
+			expectedStatus:  http.StatusOK,
+			requiresUser:    true,
+			requiresCognito: true,
+			requiresKube:    true,
+			cognitoUser: &service.CognitoUser{
+				CognitoID:       "abc",
+				DiscordUsername: "123",
+				Email:           "foobar",
+				DiscordID:       "123abc",
+				AccountEnabled:  true,
+				Credentials: service.CognitoCredentials{
+					AccessToken:  "abc",
+					RefreshToken: "def",
+				},
+			},
+			requestBody:  bytes.NewBuffer([]byte(`{"world": "foo", "name": "bar", "password": "hereisapassword"}`)),
+			expectedBody: `{"deployment_name":"bar", "mod_pvc_name":"foo", "server_ip":"123.456.789.0", "server_port":2456, "state":"running", "world_details":{"backup_count":3, "backup_interval_seconds":43200, "enable_crossplay":false, "initial_backup_seconds":7200, "instance_id":"", "modifiers":[], "name":"bar", "password":"hereisapassword", "port":"2456", "public":false, "save_interval_seconds":1800, "world":"foo"}}`,
+			cognitoAttributes: []types.AttributeType{
+				{
+					Name:  stringPtr("custom:server_details"),
+					Value: stringPtr("nil"),
+				},
+			},
+			cognitoAttributesErr: nil,
+			kubeErr:              nil,
+			cognitoUpdateErr:     nil,
 		},
 	}
 
@@ -189,12 +241,14 @@ func TestHandleCreateServerRoute(t *testing.T) {
 			mockKubeClient := new(FakeKubeClient)
 
 			if tt.requiresCognito {
-				mockCognitoService.Mock.On("GetUserAttributes", mock.Anything, mock.Anything).Return(tt.cognitoAttributes, tt.cognitoAttributesErr)
+				mockCognitoService.On("GetUserAttributes", mock.Anything, mock.Anything).Return(tt.cognitoAttributes, tt.cognitoAttributesErr)
+				mockCognitoService.On("UpdateUserAttributes", mock.Anything, mock.Anything, mock.Anything).Return(tt.cognitoUpdateErr)
 			}
 
 			if tt.requiresKube {
-				mockKubeClient.On("ApplyResources").Return()
+				mockKubeClient.On("ApplyResources").Return(tt.kubeErr)
 				mockKubeClient.On("AddAction", mock.Anything).Return()
+				mockKubeClient.On("GetClusterIp").Return("123.456.789.0", nil)
 
 				actions := []service.ResourceAction{
 					service.DeploymentAction{
@@ -227,7 +281,7 @@ func TestHandleCreateServerRoute(t *testing.T) {
 				handler.HandleRequest(c, mockKubeClient, mockCognitoService, context.TODO())
 			})
 
-			req, err := http.NewRequest(tt.method, tt.path, tt.requestBody)
+			req, err := http.NewRequest("POST", "/create-server", tt.requestBody)
 			assert.NoError(t, err)
 			resp := httptest.NewRecorder()
 			router.ServeHTTP(resp, req)

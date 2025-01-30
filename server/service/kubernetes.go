@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"io"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -11,6 +12,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"net/http"
 )
 
 // ResourceAction defines an interface for applying and rolling back Kubernetes resources.
@@ -79,6 +81,7 @@ type KubernetesService interface {
 	ApplyResources() error
 	GetActions() []ResourceAction
 	GetClient() kubernetes.Interface
+	GetClusterIp() (string, error)
 }
 
 type KubernetesServiceImpl struct {
@@ -106,6 +109,24 @@ func MakeKubernetesService() KubernetesService {
 	return &KubernetesServiceImpl{
 		Client: clientset,
 	}
+}
+
+// GetClusterIp Returns the ipv4 WAN address for the cluster. This will be the address returned to users
+// where they can point their Valheim client's to connect.
+func (k *KubernetesServiceImpl) GetClusterIp() (string, error) {
+	resp, err := http.Get("https://api.ipify.org?format=text")
+	if err != nil {
+		return "", fmt.Errorf("failed to get public IP: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Read the response body
+	ip, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	return string(ip), nil
 }
 
 func (k *KubernetesServiceImpl) GetClient() kubernetes.Interface {

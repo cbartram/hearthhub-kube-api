@@ -255,11 +255,15 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 		return nil, err
 	}
 
-	ip, err := util.GetPublicIP()
+	ip, err := kubeService.GetClusterIp()
 	if err != nil {
-		log.Errorf("failed to get public ip: %v", err)
+		log.Errorf("failed to get cluster ip: %v", err)
 	}
 
+	// Rm the instance id from the response it's not useful for users and makes
+	// testing harder since it generates a pseudo-random alphanumeric string with
+	// each invocation
+	config.InstanceId = ""
 	return &CreateServerResponse{
 		ServerIp:       ip,
 		ServerPort:     serverPort,
