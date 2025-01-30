@@ -48,7 +48,7 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 
 	modGroup.POST("/install", func(c *gin.Context) {
 		handler := InstallFileHandler{}
-		handler.HandleRequest(c, kubeService, ctx)
+		handler.HandleRequest(c, kubeService)
 	})
 
 	serverGroup.POST("/create", func(c *gin.Context) {

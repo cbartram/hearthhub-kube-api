@@ -68,22 +68,22 @@ func (f *FilePayload) Validate() error {
 
 type InstallFileHandler struct{}
 
-func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService service.KubernetesService, ctx context.Context) {
+func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService service.KubernetesService) {
 	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not read body from request: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("could not read body from request: %v", err)})
 		return
 	}
 
 	var reqBody FilePayload
 	if err = json.Unmarshal(bodyRaw, &reqBody); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid request body: %v", err)})
 		return
 	}
 
 	if err = reqBody.Validate(); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid request body: %v", err)})
 		return
 	}
 
@@ -93,10 +93,9 @@ func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService service.K
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found in context"})
 	}
 	user := tmp.(*service.CognitoUser)
-
 	name, err := CreateFileJob(kubeService.GetClient(), &reqBody, user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("could not create mod install job: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("could not create file management job: %v", err)})
 		return
 	}
 
