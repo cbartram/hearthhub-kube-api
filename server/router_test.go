@@ -7,6 +7,6 @@ import (
 )
 
 func TestNewRouter(t *testing.T) {
-	r := NewRouter(context.Background())
+	r := NewRouter(context.Background(), &FakeKubeClient{}, &MockCognitoService{})
 	assert.NotNil(t, r)
 }

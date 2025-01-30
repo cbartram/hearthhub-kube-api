@@ -37,7 +37,7 @@ func (m *MockCognitoService) GetUser(ctx context.Context, discordId *string) (*s
 
 func (m *MockCognitoService) UpdateUserAttributes(ctx context.Context, accessToken *string, attributes []types.AttributeType) error {
 	args := m.Called(ctx, accessToken, attributes)
-	return args.Error(1)
+	return args.Error(0)
 }
 
 func TestLogMiddleware(t *testing.T) {

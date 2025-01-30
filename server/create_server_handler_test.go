@@ -3,6 +3,8 @@ package server
 import (
 	"bytes"
 	"context"
+	"errors"
+	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 	"github.com/cbartram/hearthhub-mod-api/server/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -39,51 +41,99 @@ func (f *FakeKubeClient) GetClient() kubernetes.Interface {
 
 func TestHandleCreateServerRoute(t *testing.T) {
 	tests := []struct {
-		name           string
-		method         string
-		path           string
-		expectedStatus int
-		requestBody    io.Reader
-		expectedBody   string
-		requiresUser   bool
+		name                 string
+		method               string
+		path                 string
+		expectedStatus       int
+		requestBody          io.Reader
+		expectedBody         string
+		requiresUser         bool
+		cognitoUser          *service.CognitoUser
+		requiresCognito      bool
+		cognitoAttributes    []types.AttributeType
+		cognitoAttributesErr error
 	}{
 		{
-			name:           "Bad request body",
-			method:         "POST",
-			path:           "/create-server",
-			requiresUser:   false,
-			expectedStatus: http.StatusBadRequest,
-			requestBody:    bytes.NewBuffer(nil),
-			expectedBody:   `{"error":"invalid request body: unexpected end of JSON input"}`,
+			name:            "Bad request body",
+			method:          "POST",
+			path:            "/create-server",
+			requiresUser:    false,
+			requiresCognito: false,
+			expectedStatus:  http.StatusBadRequest,
+			requestBody:     bytes.NewBuffer(nil),
+			expectedBody:    `{"error":"invalid request body: unexpected end of JSON input"}`,
 		},
 		{
-			name:           "Fails input validation",
-			method:         "POST",
-			path:           "/create-server",
-			requiresUser:   false,
-			expectedStatus: http.StatusBadRequest,
-			requestBody:    bytes.NewBuffer([]byte(`{"world": "foo", "name": "bar"}`)), // Missing password
-			expectedBody:   `{"error":"invalid request body: missing required fields name, world, or password"}`,
+			name:            "Fails input validation",
+			method:          "POST",
+			path:            "/create-server",
+			requiresUser:    false,
+			requiresCognito: false,
+			expectedStatus:  http.StatusBadRequest,
+			requestBody:     bytes.NewBuffer([]byte(`{"world": "foo", "name": "bar"}`)), // Missing password
+			expectedBody:    `{"error":"invalid request body: missing required fields name, world, or password"}`,
 		},
 		{
-			name:           "No user in context",
+			name:            "No user in context",
+			method:          "POST",
+			path:            "/create-server",
+			expectedStatus:  http.StatusInternalServerError,
+			requiresUser:    false,
+			requiresCognito: false,
+			requestBody:     bytes.NewBuffer([]byte(`{"world": "foo", "name": "bar", "password": "hereisapassword"}`)),
+			expectedBody:    `{"error":"user not found in context"}`,
+		},
+		{
+			name:           "Fails to get user attributes",
 			method:         "POST",
 			path:           "/create-server",
-			expectedStatus: http.StatusInternalServerError,
-			requiresUser:   false,
-			requestBody:    bytes.NewBuffer([]byte(`{"world": "foo", "name": "bar", "password": "hereisapassword"}`)),
-			expectedBody:   `{"error":"user not found in context"}`,
+			expectedStatus: http.StatusUnauthorized,
+			requiresUser:   true,
+			cognitoUser: &service.CognitoUser{
+				CognitoID:       "abc",
+				DiscordUsername: "123",
+				Email:           "foobar",
+				DiscordID:       "123abc",
+				AccountEnabled:  true,
+				Credentials: service.CognitoCredentials{
+					AccessToken:  "abc",
+					RefreshToken: "def",
+				},
+			},
+			requiresCognito: true,
+			requestBody:     bytes.NewBuffer([]byte(`{"world": "foo", "name": "bar", "password": "hereisapassword"}`)),
+			expectedBody:    `{"error":"could not get user attributes: user unauthorized"}`,
+			cognitoAttributes: []types.AttributeType{
+				{
+					Name:  stringPtr("custom:server_details"),
+					Value: stringPtr("nil"),
+				},
+			},
+			cognitoAttributesErr: errors.New("user unauthorized"),
 		},
 	}
 
-	gin.SetMode(gin.TestMode) // Set Gin to test mode
+	gin.SetMode(gin.TestMode)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+
+			mockCognitoService := new(MockCognitoService)
+			mockKubeClient := new(FakeKubeClient)
+
+			if tt.requiresCognito {
+				mockCognitoService.Mock.On("GetUserAttributes", mock.Anything, mock.Anything).Return(tt.cognitoAttributes, tt.cognitoAttributesErr)
+			}
+
 			router := gin.Default()
 			router.POST("/create-server", func(c *gin.Context) {
 				handler := CreateServerHandler{}
-				handler.HandleRequest(c, &FakeKubeClient{}, &MockCognitoService{}, context.TODO())
+
+				if tt.requiresUser {
+					c.Set("user", tt.cognitoUser)
+				}
+
+				handler.HandleRequest(c, mockKubeClient, mockCognitoService, context.TODO())
 			})
 
 			req, err := http.NewRequest(tt.method, tt.path, tt.requestBody)

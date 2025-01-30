@@ -11,7 +11,7 @@ import (
 )
 
 // NewRouter Create a new gin router and instantiates the routes and route handlers for the entire API.
-func NewRouter(ctx context.Context) *gin.Engine {
+func NewRouter(ctx context.Context, kubeService service.KubernetesService, cognitoService service.CognitoService) *gin.Engine {
 	logger := logrus.New()
 	logger.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp: false,
@@ -30,9 +30,6 @@ func NewRouter(ctx context.Context) *gin.Engine {
 	gin.DefaultWriter = logger.Writer()
 	gin.DefaultErrorWriter = logger.Writer()
 	gin.SetMode(gin.ReleaseMode)
-
-	kubeService := service.MakeKubernetesService()
-	cognitoService := service.MakeCognitoService()
 
 	apiGroup := r.Group("/api/v1")
 	serverGroup := apiGroup.Group("/server")

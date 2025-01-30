@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/cbartram/hearthhub-mod-api/server"
+	"github.com/cbartram/hearthhub-mod-api/server/service"
 	"github.com/joho/godotenv"
 	"log"
 	"os"
@@ -24,7 +25,10 @@ func main() {
 		}
 	}
 
-	err := server.NewRouter(context.Background()).Run(fmt.Sprintf(":%v", *port))
+	kubeService := service.MakeKubernetesService()
+	cognitoService := service.MakeCognitoService()
+
+	err := server.NewRouter(context.Background(), kubeService, cognitoService).Run(fmt.Sprintf(":%v", *port))
 	if err != nil {
 		log.Fatal(err)
 	}

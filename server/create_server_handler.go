@@ -117,7 +117,7 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService service.
 	log.Infof("user attributes: %v", serverDetails)
 	if err != nil {
 		log.Errorf("could not get user attributes: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("could not get user attributes: %s", err)})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("could not get user attributes: %s", err)})
 		return
 	}
 
