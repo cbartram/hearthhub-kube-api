@@ -10,10 +10,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"io"
+	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 )
 
@@ -52,6 +55,8 @@ func TestHandleCreateServerRoute(t *testing.T) {
 		requiresCognito      bool
 		cognitoAttributes    []types.AttributeType
 		cognitoAttributesErr error
+		requiresKube         bool
+		kubeErr              error
 	}{
 		{
 			name:            "Bad request body",
@@ -111,9 +116,71 @@ func TestHandleCreateServerRoute(t *testing.T) {
 			},
 			cognitoAttributesErr: errors.New("user unauthorized"),
 		},
+		{
+			name:           "User already has Valheim server running",
+			method:         "POST",
+			path:           "/create-server",
+			expectedStatus: http.StatusBadRequest,
+			requiresUser:   true,
+			cognitoUser: &service.CognitoUser{
+				CognitoID:       "abc",
+				DiscordUsername: "123",
+				Email:           "foobar",
+				DiscordID:       "123abc",
+				AccountEnabled:  true,
+				Credentials: service.CognitoCredentials{
+					AccessToken:  "abc",
+					RefreshToken: "def",
+				},
+			},
+			requiresCognito: true,
+			requestBody:     bytes.NewBuffer([]byte(`{"world": "foo", "name": "bar", "password": "hereisapassword"}`)),
+			expectedBody:    `{"error":"server:  already exists for user: foobar. use PUT /api/v1/server/scale to manage replicas."}`,
+			cognitoAttributes: []types.AttributeType{
+				{
+					Name:  stringPtr("custom:server_details"),
+					Value: stringPtr("{\"world\": \"running\"}"),
+				},
+			},
+			cognitoAttributesErr: nil,
+		},
+		{
+			name:            "Fails to create dedicated server deployment",
+			method:          "POST",
+			path:            "/create-server",
+			expectedStatus:  http.StatusInternalServerError,
+			requiresUser:    true,
+			requiresCognito: true,
+			requiresKube:    true,
+			cognitoUser: &service.CognitoUser{
+				CognitoID:       "abc",
+				DiscordUsername: "123",
+				Email:           "foobar",
+				DiscordID:       "123abc",
+				AccountEnabled:  true,
+				Credentials: service.CognitoCredentials{
+					AccessToken:  "abc",
+					RefreshToken: "def",
+				},
+			},
+			requestBody:  bytes.NewBuffer([]byte(`{"world": "foo", "name": "bar", "password": "hereisapassword"}`)),
+			expectedBody: `{"error":"failed to apply kubernetes resource: cannot validate manifest"}`,
+			cognitoAttributes: []types.AttributeType{
+				{
+					Name:  stringPtr("custom:server_details"),
+					Value: stringPtr("nil"),
+				},
+			},
+			cognitoAttributesErr: nil,
+			kubeErr:              errors.New("cannot validate manifest"),
+		},
 	}
 
 	gin.SetMode(gin.TestMode)
+	os.Setenv("CPU_LIMIT", "1")
+	os.Setenv("CPU_REQUEST", "1")
+	os.Setenv("MEMORY_REQUEST", "128Mi")
+	os.Setenv("MEMORY_LIMIT", "128Mi")
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -123,6 +190,30 @@ func TestHandleCreateServerRoute(t *testing.T) {
 
 			if tt.requiresCognito {
 				mockCognitoService.Mock.On("GetUserAttributes", mock.Anything, mock.Anything).Return(tt.cognitoAttributes, tt.cognitoAttributesErr)
+			}
+
+			if tt.requiresKube {
+				mockKubeClient.On("ApplyResources").Return()
+				mockKubeClient.On("AddAction", mock.Anything).Return()
+
+				actions := []service.ResourceAction{
+					service.DeploymentAction{
+						Deployment: &appsv1.Deployment{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: "foo",
+							},
+						},
+					},
+					service.DeploymentAction{
+						Deployment: &appsv1.Deployment{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: "bar",
+							},
+						},
+					},
+				}
+
+				mockKubeClient.On("GetActions").Return(actions)
 			}
 
 			router := gin.Default()

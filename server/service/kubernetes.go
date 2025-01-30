@@ -25,11 +25,11 @@ type DeploymentAction struct {
 	Deployment *appsv1.Deployment
 }
 
-func (d *DeploymentAction) Name() string {
+func (d DeploymentAction) Name() string {
 	return d.Deployment.Name
 }
 
-func (d *DeploymentAction) Apply(clientset *kubernetes.Clientset) (string, error) {
+func (d DeploymentAction) Apply(clientset *kubernetes.Clientset) (string, error) {
 	r, err := clientset.AppsV1().Deployments(d.Deployment.Namespace).Create(context.TODO(), d.Deployment, metav1.CreateOptions{})
 	if err != nil {
 		return d.Deployment.Name, fmt.Errorf("failed to create deployment: %v", err)
@@ -38,7 +38,7 @@ func (d *DeploymentAction) Apply(clientset *kubernetes.Clientset) (string, error
 	return r.GetName(), nil
 }
 
-func (d *DeploymentAction) Rollback(clientset *kubernetes.Clientset) (string, error) {
+func (d DeploymentAction) Rollback(clientset *kubernetes.Clientset) (string, error) {
 	err := clientset.AppsV1().Deployments(d.Deployment.Namespace).Delete(context.TODO(), d.Deployment.Name, metav1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return d.Deployment.Name, fmt.Errorf("failed to delete deployment: %v", err)
@@ -52,11 +52,11 @@ type PVCAction struct {
 	PVC *corev1.PersistentVolumeClaim
 }
 
-func (p *PVCAction) Name() string {
+func (p PVCAction) Name() string {
 	return p.PVC.Name
 }
 
-func (p *PVCAction) Apply(clientset *kubernetes.Clientset) (string, error) {
+func (p PVCAction) Apply(clientset *kubernetes.Clientset) (string, error) {
 	r, err := clientset.CoreV1().PersistentVolumeClaims(p.PVC.Namespace).Create(context.TODO(), p.PVC, metav1.CreateOptions{})
 	if err != nil {
 		return p.PVC.Name, fmt.Errorf("failed to create PVC: %v", err)
@@ -65,7 +65,7 @@ func (p *PVCAction) Apply(clientset *kubernetes.Clientset) (string, error) {
 	return r.Name, nil
 }
 
-func (p *PVCAction) Rollback(clientset *kubernetes.Clientset) (string, error) {
+func (p PVCAction) Rollback(clientset *kubernetes.Clientset) (string, error) {
 	err := clientset.CoreV1().PersistentVolumeClaims(p.PVC.Namespace).Delete(context.TODO(), p.PVC.Name, metav1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return p.PVC.Name, fmt.Errorf("failed to delete PVC: %v", err)
