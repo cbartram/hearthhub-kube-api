@@ -20,7 +20,7 @@ type ScaleServerRequest struct {
 
 type ScaleServerHandler struct{}
 
-func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService service.KubernetesService, ctx context.Context) {
+func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService service.KubernetesService, cognito service.CognitoService, ctx context.Context) {
 	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
@@ -40,15 +40,14 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService service.K
 	}
 
 	if *reqBody.Replicas > 1 || *reqBody.Replicas < 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "replicas must be either 1 or 0"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "replicas must be either 1 or 0"})
 		return
 	}
 
-	cognito := service.MakeCognitoService()
 	tmp, exists := c.Get("user")
 	if !exists {
 		log.Errorf("user not found in context")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "user not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found in context"})
 		return
 	}
 

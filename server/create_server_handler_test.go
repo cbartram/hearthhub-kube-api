@@ -12,6 +12,7 @@ import (
 	"io"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 
 type FakeKubeClient struct {
 	mock.Mock
+	ClientOpts []runtime.Object
 }
 
 func (f *FakeKubeClient) AddAction(action service.ResourceAction) {
@@ -39,7 +41,7 @@ func (f *FakeKubeClient) GetActions() []service.ResourceAction {
 }
 
 func (f *FakeKubeClient) GetClient() kubernetes.Interface {
-	return fake.NewClientset()
+	return fake.NewClientset(f.ClientOpts...)
 }
 
 func (f *FakeKubeClient) GetClusterIp() (string, error) {

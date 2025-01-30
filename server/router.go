@@ -58,7 +58,7 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 
 	serverGroup.PUT("/scale", func(c *gin.Context) {
 		handler := ScaleServerHandler{}
-		handler.HandleRequest(c, kubeService, ctx)
+		handler.HandleRequest(c, kubeService, cognitoService, ctx)
 	})
 
 	return r
