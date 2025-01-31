@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/utils/ptr"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -116,6 +117,7 @@ func CreateFileJob(clientset kubernetes.Interface, payload *FilePayload, user *s
 			Namespace: "hearthhub",
 		},
 		Spec: batchv1.JobSpec{
+			BackoffLimit: ptr.To(int32(0)), // Ensures jobs are not retried (generally if a job fails it's a misconfiguration)
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
