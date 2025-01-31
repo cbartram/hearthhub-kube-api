@@ -2,6 +2,13 @@ name: hearthhub-kube-api
 namespace: hearthhub
 replicaCount: 1
 
+s3:
+  bucketName: "hearthhub-backups"
+
+api:
+  # Base url for this API used by other services which need to call the API from within the cluster (i.e. file manager job)
+  baseUrl: "http://hearthhub-mod-api.hearthhub.svc.cluster.local:8080"
+
 image:
   repository: cbartram/hearthhub-mod-api
   pullPolicy: IfNotPresent
@@ -31,7 +38,7 @@ service:
 ingress:
   enabled: true
   className: nginx
-  serviceName: hearthhub-mod-api
+  serviceName: hearthhub-kube-api
   port: 8080
   host: hearthhub-api.ai
 

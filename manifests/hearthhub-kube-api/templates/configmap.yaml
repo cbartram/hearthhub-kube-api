@@ -14,6 +14,8 @@ data:
   FILE_MANAGER_IMAGE_VERSION:  {{ .Values.image.fileManagerImageVersion | quote }}
 
   AWS_REGION: "us-east-1"
+  BUCKET_NAME: {{ .Values.s3.bucketName | quote }}
+  API_BASE_URL: {{ .Values.api.baseUrl | quote }}
   GIN_MODE: "release"
   BACKUP_FREQUENCY_MIN: "10"
 

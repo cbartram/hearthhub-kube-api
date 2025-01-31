@@ -134,7 +134,7 @@ requests from the internet to the VM while the tunnel is running. See [networkin
 ### Deploying Valheim Server and HearthHub API
 To deploy the hearthhub-KUBE-api run:
 
-`helm install hearthhub-mod-api ./manifests/hearthhub-mod-api -f ./manifests/hearthhub-mod-api/values.yaml`
+`helm install hearthhub-kube-api ./manifests/hearthhub-kube-api -f ./manifests/hearthhub-kube-api/values.yaml`
 
 The API comes with a service which exposes `NodePort` 30000 and can be accessed via: `http://localhost:30000/api/v1/health`
 The API is pre-configured with basic auth, and you can generate the auth value like so:
@@ -166,6 +166,7 @@ CPU_REQUEST=1
 CPU_LIMIT=1
 MEMORY_REQUEST=4Gi
 MEMORY_LIMIT=4Gi
+BUCKET_NAME=<your-s3-bucket-no-s3://-prefix>
 
 VALHEIM_IMAGE_NAME=cbartram/hearthhub
 VALHEIM_IMAGE_VERSION=0.0.6

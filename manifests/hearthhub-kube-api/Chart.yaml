@@ -1,0 +1,6 @@
+apiVersion: v2
+name: hearthhub-kube-api
+description: The API for creating, scaling, and managing Valheim dedicated servers
+type: application
+version: 0.1.0
+appVersion: "0.0.15"
