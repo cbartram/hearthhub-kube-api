@@ -53,6 +53,21 @@ file to match your built image.
 
 Run the `./scripts/build_api.sh` to do the same for the API image.
 
+## Testing
+
+Run unit tests for this software with:
+
+```shell
+go test ./... -v
+```
+
+To generate coverage reports run:
+
+```shell
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
+```
+
 ## Kubernetes Setup 
 
 ### K3s
