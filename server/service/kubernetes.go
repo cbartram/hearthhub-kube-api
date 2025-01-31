@@ -11,14 +11,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	"net/http"
 )
 
 // ResourceAction defines an interface for applying and rolling back Kubernetes resources.
 type ResourceAction interface {
-	Apply(clientset *kubernetes.Clientset) (string, error)
-	Rollback(clientset *kubernetes.Clientset) (string, error)
+	Apply(clientset kubernetes.Interface) (string, error)
+	Rollback(clientset kubernetes.Interface) (string, error)
 	Name() string
 }
 
@@ -31,7 +30,7 @@ func (d DeploymentAction) Name() string {
 	return d.Deployment.Name
 }
 
-func (d DeploymentAction) Apply(clientset *kubernetes.Clientset) (string, error) {
+func (d DeploymentAction) Apply(clientset kubernetes.Interface) (string, error) {
 	r, err := clientset.AppsV1().Deployments(d.Deployment.Namespace).Create(context.TODO(), d.Deployment, metav1.CreateOptions{})
 	if err != nil {
 		return d.Deployment.Name, fmt.Errorf("failed to create deployment: %v", err)
@@ -40,7 +39,7 @@ func (d DeploymentAction) Apply(clientset *kubernetes.Clientset) (string, error)
 	return r.GetName(), nil
 }
 
-func (d DeploymentAction) Rollback(clientset *kubernetes.Clientset) (string, error) {
+func (d DeploymentAction) Rollback(clientset kubernetes.Interface) (string, error) {
 	err := clientset.AppsV1().Deployments(d.Deployment.Namespace).Delete(context.TODO(), d.Deployment.Name, metav1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return d.Deployment.Name, fmt.Errorf("failed to delete deployment: %v", err)
@@ -58,7 +57,7 @@ func (p PVCAction) Name() string {
 	return p.PVC.Name
 }
 
-func (p PVCAction) Apply(clientset *kubernetes.Clientset) (string, error) {
+func (p PVCAction) Apply(clientset kubernetes.Interface) (string, error) {
 	r, err := clientset.CoreV1().PersistentVolumeClaims(p.PVC.Namespace).Create(context.TODO(), p.PVC, metav1.CreateOptions{})
 	if err != nil {
 		return p.PVC.Name, fmt.Errorf("failed to create PVC: %v", err)
@@ -67,7 +66,7 @@ func (p PVCAction) Apply(clientset *kubernetes.Clientset) (string, error) {
 	return r.Name, nil
 }
 
-func (p PVCAction) Rollback(clientset *kubernetes.Clientset) (string, error) {
+func (p PVCAction) Rollback(clientset kubernetes.Interface) (string, error) {
 	err := clientset.CoreV1().PersistentVolumeClaims(p.PVC.Namespace).Delete(context.TODO(), p.PVC.Name, metav1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return p.PVC.Name, fmt.Errorf("failed to delete PVC: %v", err)
@@ -85,23 +84,13 @@ type KubernetesService interface {
 }
 
 type KubernetesServiceImpl struct {
-	Client          *kubernetes.Clientset
+	Client          kubernetes.Interface
 	ResourceActions []ResourceAction
 }
 
 // MakeKubernetesService Creates a new kubernetes service object which intelligently loads configuration from
 // either in-cluster or local if in-cluster fails.
-func MakeKubernetesService() KubernetesService {
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		log.Infof("could not create in cluster config. Attempting to load local kube config: %v", err.Error())
-		config, err = clientcmd.BuildConfigFromFlags("", clientcmd.RecommendedHomeFile)
-		if err != nil {
-			log.Fatalf("could not load local kubernetes config: %v", err.Error())
-		}
-		log.Infof("local kube config loaded successfully")
-	}
-
+func MakeKubernetesService(config *rest.Config) KubernetesService {
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		log.Fatalf("Error creating kubernetes client: %v", err)

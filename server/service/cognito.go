@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 	"github.com/cbartram/hearthhub-mod-api/server/util"
@@ -51,14 +50,9 @@ type SessionData struct {
 }
 
 // MakeCognitoService creates a new instance of CognitoAuthManager
-func MakeCognitoService() CognitoService {
-	cfg, err := config.LoadDefaultConfig(context.TODO())
-	if err != nil {
-		log.Errorf("error loading default aws config: %s", err)
-	}
-
+func MakeCognitoService(awsConfig aws.Config) CognitoService {
 	return &CognitoServiceImpl{
-		cognitoClient: cognitoidentityprovider.NewFromConfig(cfg),
+		cognitoClient: cognitoidentityprovider.NewFromConfig(awsConfig),
 		userPoolID:    os.Getenv("USER_POOL_ID"),
 		clientID:      os.Getenv("COGNITO_CLIENT_ID"),
 		clientSecret:  os.Getenv("COGNITO_CLIENT_SECRET"),
