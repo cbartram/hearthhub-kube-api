@@ -165,30 +165,27 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 	deploymentName := fmt.Sprintf("valheim-%s", discordId)
 
 	log.Infof("server args: %v", serverArgs)
+	labels := map[string]string{
+		"app":               "valheim",
+		"created-by":        deploymentName,
+		"tenant-discord-id": discordId,
+	}
 
 	// Create deployment object
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      deploymentName,
 			Namespace: "hearthhub",
-			Labels: map[string]string{
-				"app": "valheim",
-			},
+			Labels:    labels,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: util.Int32Ptr(1),
 			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": "valheim",
-				},
+				MatchLabels: labels,
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"app":               "valheim",
-						"created-by":        deploymentName,
-						"tenant-discord-id": discordId,
-					},
+					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: "hearthhub-api-sa",
