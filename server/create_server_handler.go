@@ -191,14 +191,26 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 					ServiceAccountName: "hearthhub-api-sa",
 					Containers: []corev1.Container{
 						{
-							Name:  "valheim",
-							Image: fmt.Sprintf("%s:%s", os.Getenv("VALHEIM_IMAGE_NAME"), os.Getenv("VALHEIM_IMAGE_VERSION")),
-							Args:  serverArgs,
+							Name:    "valheim",
+							Image:   fmt.Sprintf("%s:%s", os.Getenv("VALHEIM_IMAGE_NAME"), os.Getenv("VALHEIM_IMAGE_VERSION")),
+							Command: []string{"sh", "-c"},
+							Args:    []string{serverArgs},
 							Ports: []corev1.ContainerPort{
 								{
 									ContainerPort: int32(serverPort),
 									Name:          "game",
 								},
+							},
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									Exec: &corev1.ExecAction{
+										Command: []string{"/valheim/health_check.sh"},
+									},
+								},
+								InitialDelaySeconds: 30, // This value sets the min time it takes to "start" the server. Need to get a better idea of what a normal range for this is.
+								PeriodSeconds:       10,
+								SuccessThreshold:    1,
+								FailureThreshold:    25, // Essentially 250 extra seconds for the server to startup
 							},
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{

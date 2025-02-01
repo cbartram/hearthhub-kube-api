@@ -143,6 +143,7 @@ func (k *KubernetesServiceImpl) ApplyResources() error {
 					log.Errorf("Error rolling back resource: %s err: %v", name, err)
 				}
 			}
+
 			return fmt.Errorf("failed to apply resource: %s, rolled back changes", name)
 		}
 	}

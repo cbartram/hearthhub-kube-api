@@ -54,14 +54,14 @@ RUN apt-get update && apt-get install -y \
 
 
 WORKDIR /valheim
-RUN cp ./steamclient.so /usr/lib
-
+RUN cp ./steamclient.so /usr/lib && touch /valheim/output.log
+COPY ./scripts/health_check.sh .
 
 # Install BepInEx
 RUN curl -X GET -LO https://gcdn.thunderstore.io/live/repository/packages/denikson-BepInExPack_Valheim-5.4.2202.zip && \
     unzip ./denikson-BepInExPack_Valheim-5.4.2202.zip -d /tmp && \
     rm ./denikson-BepInExPack_Valheim-5.4.2202.zip && \
-    cp -r /tmp/BepInExPack_Valheim/. . \
+    cp -r /tmp/BepInExPack_Valheim/. .
 
 # Set default values for arguments & server required env vars although these will be overriden by Kubernetes spec.container.args
 ENV SERVER_NAME="My Server" \
@@ -79,4 +79,5 @@ ENV SERVER_NAME="My Server" \
 
 RUN chmod +x valheim_server.x86_64
 
+# This command doesn't actually do anything since it's overwritten by the kubernetes deployment args
 CMD ["./valheim_server.x86_64", "-name", "${SERVER_NAME}", "-port", "${SERVER_PORT}", "-world", "${WORLD_NAME}", "-password", "${SERVER_PASS}", "-crossplay"]

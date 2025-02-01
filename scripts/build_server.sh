@@ -18,7 +18,7 @@ IMAGE_NAME="cbartram/hearthhub:$TAG"
 
 # Build Docker image
 echo -e "${YELLOW}Building Docker image: ${IMAGE_NAME}${NC}"
-docker build . -f Dockerfile.api -t "$IMAGE_NAME"
+docker build . -f Dockerfile -t "$IMAGE_NAME" --progress=plain
 
 # Check if build was successful
 if [ $? -ne 0 ]; then

@@ -144,7 +144,7 @@ func UpdateServerArgs(kubeService service.KubernetesService, deploymentName stri
 
 	for i, container := range deployment.Spec.Template.Spec.Containers {
 		if container.Name == "valheim" {
-			deployment.Spec.Template.Spec.Containers[i].Args = server.WorldDetails.ToStringArgs()
+			deployment.Spec.Template.Spec.Containers[i].Args = []string{server.WorldDetails.ToStringArgs()}
 			break
 		}
 	}

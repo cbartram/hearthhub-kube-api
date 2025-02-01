@@ -1,8 +1,10 @@
 package server
 
 import (
+	"fmt"
 	"github.com/cbartram/hearthhub-mod-api/server/util"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -100,40 +102,25 @@ func MakeConfigWithDefaults(options *CreateServerRequest) *Config {
 	return config
 }
 
-func (c *Config) ToStringArgs() []string {
-	serverArgs := []string{
-		"./valheim_server.x86_64",
-		"-name",
-		c.Name,
-		"-port",
-		c.Port,
-		"-world",
-		c.World,
-		"-password",
-		c.Password,
-		"-instanceid",
-		c.InstanceId,
-		"-backups",
-		strconv.Itoa(c.BackupCount),
-		"-backupshort",
-		strconv.Itoa(c.InitialBackupSeconds),
-		"-backuplong",
-		strconv.Itoa(c.BackupIntervalSeconds),
-	}
+func (c *Config) ToStringArgs() string {
+	var sb strings.Builder
+	args := fmt.Sprintf("/valheim/valheim_server.x86_64 -name %s -port %s -world %s -password %s -instanceid %s -backups %s -backupshort %s -backuplong %s ",
+		c.Name, c.Port, c.World, c.Password, c.InstanceId, strconv.Itoa(c.BackupCount), strconv.Itoa(c.InitialBackupSeconds), strconv.Itoa(c.BackupIntervalSeconds))
 
 	if c.EnableCrossplay {
-		serverArgs = append(serverArgs, "-crossplay")
+		sb.WriteString("-crossplay ")
 	}
 
 	if c.Public {
-		serverArgs = append(serverArgs, "-public", "1")
+		sb.WriteString("-public 1 ")
 	} else {
-		serverArgs = append(serverArgs, "-public", "0")
+		sb.WriteString("-public 0 ")
 	}
 
 	for _, modifier := range c.Modifiers {
-		serverArgs = append(serverArgs, "-modifier", modifier.ModifierKey, modifier.ModifierValue)
+		sb.WriteString(fmt.Sprintf("-modifier %s %s ", modifier.ModifierKey, modifier.ModifierValue))
 	}
 
-	return serverArgs
+	sb.WriteString("| tee /valheim/output.log")
+	return args + sb.String()
 }

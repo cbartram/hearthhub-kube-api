@@ -129,7 +129,7 @@ func TestToStringArgs(t *testing.T) {
 	tests := []struct {
 		name     string
 		config   *Config
-		expected []string
+		expected string
 	}{
 		{
 			name: "All fields with defaults",
@@ -146,18 +146,7 @@ func TestToStringArgs(t *testing.T) {
 				BackupIntervalSeconds: 43200,
 				Modifiers:             []Modifier{},
 			},
-			expected: []string{
-				"./valheim_server.x86_64",
-				"-name", "MyServer",
-				"-port", "2456",
-				"-world", "MyWorld",
-				"-password", "MyPassword",
-				"-instanceid", "12345",
-				"-backups", "3",
-				"-backupshort", "7200",
-				"-backuplong", "43200",
-				"-public", "0",
-			},
+			expected: "./valheim_server.x86_64 -name MyServer -port 2456 -world MyWorld -password MyPassword -instanceid 12345 -backups 3 -backupshort 7200 -backuplong 43200 -public 0 | tee /valheim/output.log",
 		},
 		{
 			name: "Enable crossplay and public server",
@@ -174,19 +163,7 @@ func TestToStringArgs(t *testing.T) {
 				BackupIntervalSeconds: 43200,
 				Modifiers:             []Modifier{},
 			},
-			expected: []string{
-				"./valheim_server.x86_64",
-				"-name", "MyServer",
-				"-port", "2456",
-				"-world", "MyWorld",
-				"-password", "MyPassword",
-				"-instanceid", "12345",
-				"-backups", "3",
-				"-backupshort", "7200",
-				"-backuplong", "43200",
-				"-crossplay",
-				"-public", "1",
-			},
+			expected: "./valheim_server.x86_64 -name MyServer -port 2456 -world MyWorld -password MyPassword -instanceid 12345 -backups 3 -backupshort 7200 -backuplong 43200 -crossplay -public 1 | tee /valheim/output.log",
 		},
 		{
 			name: "With modifiers",
@@ -206,29 +183,13 @@ func TestToStringArgs(t *testing.T) {
 					{ModifierKey: "mod2", ModifierValue: "value2"},
 				},
 			},
-			expected: []string{
-				"./valheim_server.x86_64",
-				"-name", "MyServer",
-				"-port", "2456",
-				"-world", "MyWorld",
-				"-password", "MyPassword",
-				"-instanceid", "12345",
-				"-backups", "3",
-				"-backupshort", "7200",
-				"-backuplong", "43200",
-				"-public", "0",
-				"-modifier", "mod1", "value1",
-				"-modifier", "mod2", "value2",
-			},
+			expected: "./valheim_server.x86_64 -name MyServer -port 2456 -world MyWorld -password MyPassword -instanceid 12345 -backups 3 -backupshort 7200 -backuplong 43200 -public 0 -modifier mod1 value1 -modifier mod2 value2 | tee /valheim/output.log",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Act
 			result := tt.config.ToStringArgs()
-
-			// Assert
 			assert.Equal(t, tt.expected, result)
 		})
 	}
