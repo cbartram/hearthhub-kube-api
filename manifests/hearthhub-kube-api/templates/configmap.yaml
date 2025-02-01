@@ -18,6 +18,7 @@ data:
   API_BASE_URL: {{ .Values.api.baseUrl | quote }}
   GIN_MODE: "release"
   BACKUP_FREQUENCY_MIN: "10"
+  CLEANUP_FREQUENCY_MIN: "60"
 
   # Resources
   CPU_REQUEST: "2"
