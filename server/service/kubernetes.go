@@ -81,6 +81,7 @@ type KubernetesService interface {
 	GetActions() []ResourceAction
 	GetClient() kubernetes.Interface
 	GetClusterIp() (string, error)
+	Rollback() error
 }
 
 type KubernetesServiceImpl struct {
@@ -134,12 +135,12 @@ func (k *KubernetesServiceImpl) AddAction(action ResourceAction) {
 func (k *KubernetesServiceImpl) ApplyResources() error {
 	for _, resource := range k.ResourceActions {
 		if name, err := resource.Apply(k.Client); err != nil {
-			log.Infof("Error applying resource: %s err: %v", name, err)
+			log.Errorf("Error applying resource: %s err: %v", name, err)
 
 			// Rollback all previously applied resources
 			for _, appliedResource := range k.ResourceActions {
 				if name, err := appliedResource.Rollback(k.Client); err != nil {
-					log.Infof("Error rolling back resource: %s err: %v", name, err)
+					log.Errorf("Error rolling back resource: %s err: %v", name, err)
 				}
 			}
 			return fmt.Errorf("failed to apply resource: %s, rolled back changes", name)
@@ -147,5 +148,15 @@ func (k *KubernetesServiceImpl) ApplyResources() error {
 	}
 
 	log.Infof("%v resources applied successfully", len(k.ResourceActions))
+	return nil
+}
+
+func (k *KubernetesServiceImpl) Rollback() error {
+	for _, appliedResource := range k.ResourceActions {
+		if name, err := appliedResource.Rollback(k.Client); err != nil {
+			log.Errorf("Error deleting resource: %s err: %v", name, err)
+			return err
+		}
+	}
 	return nil
 }

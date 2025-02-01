@@ -56,6 +56,11 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 		handler.HandleRequest(c, kubeService, cognitoService, ctx)
 	})
 
+	serverGroup.DELETE("/delete", func(c *gin.Context) {
+		handler := DeleteServerHandler{}
+		handler.HandleRequest(c, kubeService, cognitoService, ctx)
+	})
+
 	serverGroup.PUT("/scale", func(c *gin.Context) {
 		handler := ScaleServerHandler{}
 		handler.HandleRequest(c, kubeService, cognitoService, ctx)

@@ -49,6 +49,11 @@ func (f *FakeKubeClient) GetClusterIp() (string, error) {
 	return args.String(0), args.Error(1)
 }
 
+func (f *FakeKubeClient) Rollback() error {
+	args := f.Called()
+	return args.Error(0)
+}
+
 func TestHandleCreateServerRoute(t *testing.T) {
 	tests := []struct {
 		name                 string
