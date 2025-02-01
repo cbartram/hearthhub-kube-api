@@ -114,7 +114,7 @@ func TestHandleScaleServerHandlerRoute(t *testing.T) {
 			name:                   "Fails getting deployment",
 			expectedStatus:         http.StatusInternalServerError,
 			requestBody:            bytes.NewBuffer([]byte(`{"replicas": 1}`)),
-			expectedBody:           `{"error":"failed to get deployment scale from kubernetes api: deployments.apps \"valheim-foo\" not found"}`,
+			expectedBody:           `{"error":"failed to update deployment args: deployments.apps \"valheim-foo\" not found"}`,
 			requiresUser:           true,
 			user:                   &service.CognitoUser{DiscordID: "foo", Credentials: service.CognitoCredentials{RefreshToken: "bar", AccessToken: "bar"}},
 			requiresCognitoMock:    true,

@@ -84,6 +84,13 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService service.K
 
 	// Scale down the deployment
 	deploymentName := fmt.Sprintf("valheim-%s", user.DiscordID)
+
+	err = UpdateServerArgs(kubeService, deploymentName, &server)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to update deployment args: %v", err)})
+		return
+	}
+
 	scale, err := kubeService.GetClient().AppsV1().Deployments("hearthhub").GetScale(context.TODO(), deploymentName, metav1.GetOptions{})
 	if err != nil {
 		// TODO If deployment doesn't exist we are in a bad state and need to set cognito custom:server_details to "nil"
@@ -124,4 +131,29 @@ func UpdateServerDetails(ctx context.Context, cognito service.CognitoService, re
 		return nil, err
 	}
 	return res, nil
+}
+
+// UpdateServerArgs Update's a deployment's args to reflect what is in Cognito. This avoids complex argument merging logic by simply having the frontend
+// update cognito with the new server args.
+func UpdateServerArgs(kubeService service.KubernetesService, deploymentName string, server *CreateServerResponse) error {
+	deployment, err := kubeService.GetClient().AppsV1().Deployments("hearthhub").Get(context.TODO(), deploymentName, metav1.GetOptions{})
+	if err != nil {
+		log.Errorf("error getting deployment: %v", err)
+		return err
+	}
+
+	for i, container := range deployment.Spec.Template.Spec.Containers {
+		if container.Name == "valheim" {
+			deployment.Spec.Template.Spec.Containers[i].Args = server.WorldDetails.ToStringArgs()
+			break
+		}
+	}
+
+	_, err = kubeService.GetClient().AppsV1().Deployments("hearthhub").Update(context.TODO(), deployment, metav1.UpdateOptions{})
+	if err != nil {
+		log.Errorf("error updating deployment: %v", err)
+		return err
+	}
+
+	return nil
 }
