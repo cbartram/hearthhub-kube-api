@@ -40,9 +40,13 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 	serverGroup.Use(AuthMiddleware(cognitoService))
 	modGroup.Use(AuthMiddleware(cognitoService))
 
+	// The health route returns the latest versions for the valheim server and sidecar so users
+	// can be alerted when to delete and re-create their servers.
 	apiGroup.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"status": "OK",
+			"status":                  "OK",
+			"valheim-server-version":  os.Getenv("VALHEIM_IMAGE_VERSION"),
+			"valheim-sidecar-version": os.Getenv("BACKUP_MANAGER_IMAGE_VERSION"),
 		})
 	})
 
