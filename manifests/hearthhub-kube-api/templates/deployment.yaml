@@ -15,7 +15,7 @@ spec:
       labels:
         app: {{.Values.name}}
     spec:
-      serviceAccountName: hearthhub-api-sa
+      serviceAccountName: {{.Values.serviceAccountName}}
       containers:
         - name: main
           image: {{.Values.image.repository}}:{{.Values.image.tag}}
@@ -30,7 +30,7 @@ spec:
             - secretRef:
                 name: aws-creds
             - secretRef:
-                name: basic-auth
+                name: rabbitmq-secrets
             - configMapRef:
                 name: server-config
           ports:

@@ -40,6 +40,15 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 	serverGroup.Use(AuthMiddleware(cognitoService))
 	modGroup.Use(AuthMiddleware(cognitoService))
 
+	wsManager := NewWebSocketManager()
+
+	go wsManager.Run()
+	go wsManager.ConsumeRabbitMQ()
+
+	r.GET("/ws", func(c *gin.Context) {
+		wsManager.HandleWebSocket(c.Writer, c.Request)
+	})
+
 	// The health route returns the latest versions for the valheim server and sidecar so users
 	// can be alerted when to delete and re-create their servers.
 	apiGroup.GET("/health", func(c *gin.Context) {

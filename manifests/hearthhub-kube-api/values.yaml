@@ -8,13 +8,14 @@ s3:
 api:
   # Base url for this API used by other services which need to call the API from within the cluster (i.e. file manager job)
   baseUrl: "http://hearthhub-kube-api.hearthhub.svc.cluster.local:8080"
+  rabbitmqBaseUrl: "rabbitmq.rabbitmq.svc.cluster.local:5672"
 
 image:
   repository: cbartram/hearthhub-mod-api
   pullPolicy: IfNotPresent
 
   # Tag for the API itself
-  tag: "0.0.28"
+  tag: "0.0.30"
 
   # Versions for images the API is responsible for deploying
   # i.e. sidecar container, valheim server, and mod/file manager
@@ -26,8 +27,7 @@ image:
   fileManagerImageVersion: "0.0.12"
 
 imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
+serviceAccountName: hearthhub-api-sa
 
 service:
   type: NodePort
@@ -55,8 +55,3 @@ autoscaling:
   minReplicas: 1
   maxReplicas: 3
   targetCPUUtilizationPercentage: 80
-
-volumes: []
-
-volumeMounts: []
-

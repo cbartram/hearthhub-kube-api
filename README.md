@@ -174,6 +174,9 @@ BACKUP_MANAGER_IMAGE_NAME=cbartram/hearthhub-sidecar
 BACKUP_MANAGER_IMAGE_VERSION=0.0.4
 FILE_MANAGER_IMAGE_NAME=cbartram/hearthhub-plugin-manager
 FILE_MANAGER_IMAGE_VERSION=0.0.9
+
+RABBITMQ_DEFAULT_USER=<username>
+RABBITMQ_DEFAULT_PASS=<pass>
 ```
 
 Build the API with `go build -o main .` and run with `./main` The API will be running on: `http://localhost:8080`
