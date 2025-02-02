@@ -46,8 +46,16 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 	go wsManager.ConsumeRabbitMQ()
 
 	r.GET("/ws", func(c *gin.Context) {
-		wsManager.HandleWebSocket(c.Writer, c.Request)
-	})
+		tmp, exists := c.Get("user")
+		if !exists {
+			logrus.Errorf("user not found in context")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "user not found in context"})
+			return
+		}
+
+		user := tmp.(*service.CognitoUser)
+		wsManager.HandleWebSocket(user, c.Writer, c.Request)
+	}, AuthMiddleware(cognitoService))
 
 	// The health route returns the latest versions for the valheim server and sidecar so users
 	// can be alerted when to delete and re-create their servers.

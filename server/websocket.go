@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/cbartram/hearthhub-mod-api/server/service"
 	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
 	"net/http"
@@ -14,26 +15,33 @@ import (
 
 // Message represents the structure of messages being passed
 type Message struct {
-	Type    string      `json:"type"`
-	Content interface{} `json:"content"`
+	Type      string      `json:"type"`
+	Content   interface{} `json:"content"`
+	DiscordId string      `json:"discord_id"`
+}
+
+// Client represents a WebSocket client connection
+type Client struct {
+	conn      *websocket.Conn
+	discordId string
 }
 
 // WebSocketManager handles multiple WebSocket connections
 type WebSocketManager struct {
-	clients    map[*websocket.Conn]bool
+	clients    map[*Client]bool
 	broadcast  chan Message
-	register   chan *websocket.Conn
-	unregister chan *websocket.Conn
+	register   chan *Client
+	unregister chan *Client
 	mutex      sync.Mutex
 }
 
 // NewWebSocketManager creates a new WebSocket manager
 func NewWebSocketManager() *WebSocketManager {
 	return &WebSocketManager{
-		clients:    make(map[*websocket.Conn]bool),
+		clients:    make(map[*Client]bool),
 		broadcast:  make(chan Message),
-		register:   make(chan *websocket.Conn),
-		unregister: make(chan *websocket.Conn),
+		register:   make(chan *Client),
+		unregister: make(chan *Client),
 	}
 }
 
@@ -47,23 +55,28 @@ func (manager *WebSocketManager) Run() {
 			manager.mutex.Lock()
 			manager.clients[client] = true
 			manager.mutex.Unlock()
+			log.Infof("client connected with discord ID: %s", client.discordId)
 
 		case client := <-manager.unregister:
 			if _, ok := manager.clients[client]; ok {
 				manager.mutex.Lock()
 				delete(manager.clients, client)
-				client.Close()
+				client.conn.Close()
 				manager.mutex.Unlock()
+				log.Infof("client disconnected with discord ID: %s", client.discordId)
 			}
 
 		case message := <-manager.broadcast:
 			manager.mutex.Lock()
 			for client := range manager.clients {
-				err := client.WriteJSON(message)
-				if err != nil {
-					log.Errorf("error broadcasting to client: %s  err: %v", client.RemoteAddr(), err)
-					client.Close()
-					delete(manager.clients, client)
+				// Only send message if it matches the client's discord ID
+				if client.discordId == message.DiscordId {
+					err := client.conn.WriteJSON(message)
+					if err != nil {
+						log.Errorf("error broadcasting to client (%s): %v", client.discordId, err)
+						client.conn.Close()
+						delete(manager.clients, client)
+					}
 				}
 			}
 			manager.mutex.Unlock()
@@ -71,7 +84,7 @@ func (manager *WebSocketManager) Run() {
 	}
 }
 
-func (manager *WebSocketManager) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+func (manager *WebSocketManager) HandleWebSocket(user *service.CognitoUser, w http.ResponseWriter, r *http.Request) {
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			return true // Allow all origins in development
@@ -84,10 +97,15 @@ func (manager *WebSocketManager) HandleWebSocket(w http.ResponseWriter, r *http.
 		return
 	}
 
-	manager.register <- conn
+	client := &Client{
+		conn:      conn,
+		discordId: user.DiscordID,
+	}
+
+	manager.register <- client
 
 	defer func() {
-		manager.unregister <- conn
+		manager.unregister <- client
 	}()
 
 	// Read messages
@@ -105,6 +123,7 @@ func (manager *WebSocketManager) ConsumeRabbitMQ() {
 	conn, err := amqp.Dial(fmt.Sprintf("amqp://%s@%s/", credentials, os.Getenv("RABBITMQ_BASE_URL")))
 	if err != nil {
 		log.Errorf("failed to connect to RabbitMQ: %v", err)
+		return
 	}
 	defer conn.Close()
 
@@ -116,13 +135,13 @@ func (manager *WebSocketManager) ConsumeRabbitMQ() {
 
 	// Declare exchange
 	err = ch.ExchangeDeclare(
-		"messages", // exchange name
-		"fanout",   // exchange type
-		true,       // durable
-		false,      // auto-deleted
-		false,      // internal
-		false,      // no-wait
-		nil,        // arguments
+		"valheim-server-status", // exchange name
+		"topic",                 // exchange type
+		true,                    // durable
+		false,                   // auto-deleted
+		false,                   // internal
+		false,                   // no-wait
+		nil,                     // arguments
 	)
 	if err != nil {
 		log.Fatalf("Failed to declare exchange: %v", err)
@@ -143,9 +162,9 @@ func (manager *WebSocketManager) ConsumeRabbitMQ() {
 
 	// Bind queue to exchange
 	err = ch.QueueBind(
-		q.Name,     // queue name
-		"",         // routing key
-		"messages", // exchange
+		q.Name,                  // queue name
+		"#",                     // routing key
+		"valheim-server-status", // exchange
 		false,
 		nil,
 	)
@@ -165,6 +184,8 @@ func (manager *WebSocketManager) ConsumeRabbitMQ() {
 	if err != nil {
 		log.Errorf("failed to register consumer: %v", err)
 	}
+
+	log.Infof("successfully connected to RabbitMQ and waiting for messages...")
 
 	// Handle incoming messages
 	for msg := range msgs {

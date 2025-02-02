@@ -225,9 +225,10 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 							VolumeMounts: MakeVolumeMounts(),
 						},
 						{
-							Name:  "backup-manager",
-							Image: fmt.Sprintf("%s:%s", os.Getenv("BACKUP_MANAGER_IMAGE_NAME"), os.Getenv("BACKUP_MANAGER_IMAGE_VERSION")),
-
+							Name:    "backup-manager",
+							Image:   fmt.Sprintf("%s:%s", os.Getenv("BACKUP_MANAGER_IMAGE_NAME"), os.Getenv("BACKUP_MANAGER_IMAGE_VERSION")),
+							Command: []string{"sh", "-c"},
+							Args:    []string{"/app/main -mode backup"},
 							// Ensure this container gets AWS creds so it can upload to S3
 							EnvFrom: []corev1.EnvFromSource{
 								{
@@ -237,7 +238,15 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 										},
 									},
 								},
-								// AWS_REGION and BACKUP_FREQ env vars are part of this CM which are also required
+								// Required if the mode is set to publish
+								{
+									SecretRef: &corev1.SecretEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "rabbitmq-secrets",
+										},
+									},
+								},
+								// AWS_REGION, RABBITMQ_BASE_URL and BACKUP_FREQ env vars are part of this CM which are also required
 								{
 									ConfigMapRef: &corev1.ConfigMapEnvSource{
 										LocalObjectReference: corev1.LocalObjectReference{
