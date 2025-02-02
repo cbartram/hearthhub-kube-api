@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/cbartram/hearthhub-mod-api/server/service"
+	"github.com/gin-gonic/gin"
 	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
 	"net/http"
@@ -30,6 +31,7 @@ type Client struct {
 // WebSocketManager handles multiple WebSocket connections
 type WebSocketManager struct {
 	Channel    *amqp.Channel
+	Connection *amqp.Connection
 	clients    map[*Client]bool
 	broadcast  chan Message
 	register   chan *Client
@@ -46,17 +48,15 @@ func NewWebSocketManager() (*WebSocketManager, error) {
 		log.Errorf("failed to connect to RabbitMQ: %v", err)
 		return nil, err
 	}
-	defer conn.Close()
 
 	ch, err := conn.Channel()
 	if err != nil {
 		log.Errorf("failed to open channel: %v", err)
 	}
-	defer ch.Close()
 
 	err = ch.ExchangeDeclare(
 		"valheim-server-status", // exchange name
-		"fanout",                // exchange type
+		"direct",                // exchange type
 		true,                    // durable
 		false,                   // auto-deleted
 		false,                   // internal
@@ -69,6 +69,7 @@ func NewWebSocketManager() (*WebSocketManager, error) {
 
 	return &WebSocketManager{
 		Channel:    ch,
+		Connection: conn,
 		clients:    make(map[*Client]bool),
 		broadcast:  make(chan Message),
 		register:   make(chan *Client),
@@ -100,16 +101,17 @@ func (w *WebSocketManager) Run() {
 	}
 }
 
-func (w *WebSocketManager) HandleWebSocket(user *service.CognitoUser, writer http.ResponseWriter, r *http.Request) {
+func (w *WebSocketManager) HandleWebSocket(user *service.CognitoUser, c *gin.Context) {
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			return true // Allow all origins in development
 		},
 	}
 
-	conn, err := upgrader.Upgrade(writer, r, nil)
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Printf("Error upgrading connection: %v", err)
+		log.Errorf("error upgrading connection: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("error upgrading connection: %v", err)})
 		return
 	}
 
@@ -123,7 +125,7 @@ func (w *WebSocketManager) HandleWebSocket(user *service.CognitoUser, writer htt
 		nil,   // arguments
 	)
 	if err != nil {
-		log.Printf("Error declaring queue: %v", err)
+		log.Errorf("error declaring queue: %v", err)
 		conn.Close()
 		return
 	}
@@ -137,7 +139,7 @@ func (w *WebSocketManager) HandleWebSocket(user *service.CognitoUser, writer htt
 		nil,
 	)
 	if err != nil {
-		log.Printf("Error binding queue: %v", err)
+		log.Errorf("error binding queue: %v", err)
 		conn.Close()
 		return
 	}
@@ -153,7 +155,7 @@ func (w *WebSocketManager) HandleWebSocket(user *service.CognitoUser, writer htt
 		nil,    // args
 	)
 	if err != nil {
-		log.Printf("Error starting consumer: %v", err)
+		log.Errorf("error starting consumer: %v", err)
 		conn.Close()
 		return
 	}
@@ -168,7 +170,9 @@ func (w *WebSocketManager) HandleWebSocket(user *service.CognitoUser, writer htt
 
 	// Every client get's their own QueueBind which is routed by the discord id.
 	// This is why no broadcasting or checking if message discord id = client id is needed
-	// Client's will only consume their messages since they are only sent to their discord id.
+	// Client's will only consume their messages since they are only sent to their discord id. This function
+	// takes the message from the queue and forwards it to the websocket connection keeping the RabbitMQ impl independent
+	// of websockets.
 	go func() {
 		for msg := range msgs {
 			var message Message
@@ -191,11 +195,20 @@ func (w *WebSocketManager) HandleWebSocket(user *service.CognitoUser, writer htt
 		conn.Close()
 	}()
 
-	// Read messages
+	// Read messages from the websocket connection. Generally the client should not be sending messages to us as this websocket connection
+	// is meant to provide real time information about server status not client info. This for loop is meant to keep client
+	// connections open until they close them (leave the browser window). Once this happens the defered function calls
+	// for unregistering a client occur.
 	for {
-		_, _, err := conn.ReadMessage()
+		_, message, err := conn.ReadMessage()
 		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Errorf("unexpected websocket error: %v", err)
+			} else {
+				log.Infof("client disconnected: %v", err)
+			}
 			break
 		}
+		log.Infof("received message from client: %s", message)
 	}
 }

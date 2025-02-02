@@ -63,9 +63,6 @@ func AuthMiddleware(cognito service.CognitoService) gin.HandlerFunc {
 			return
 		}
 
-		print("We got the user!: ", user)
-		print("error: ", err)
-
 		c.Set("user", user)
 		c.Next()
 	}

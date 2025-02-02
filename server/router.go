@@ -11,7 +11,7 @@ import (
 )
 
 // NewRouter Create a new gin router and instantiates the routes and route handlers for the entire API.
-func NewRouter(ctx context.Context, kubeService service.KubernetesService, cognitoService service.CognitoService) *gin.Engine {
+func NewRouter(ctx context.Context, kubeService service.KubernetesService, cognitoService service.CognitoService) (*gin.Engine, *WebSocketManager) {
 	logger := logrus.New()
 	logger.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp: false,
@@ -49,7 +49,7 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 		go wsManager.Run()
 	}
 
-	r.GET("/ws", func(c *gin.Context) {
+	r.GET("/ws", AuthMiddleware(cognitoService), func(c *gin.Context) {
 		tmp, exists := c.Get("user")
 		if !exists {
 			logrus.Errorf("user not found in context")
@@ -60,8 +60,8 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 		user := tmp.(*service.CognitoUser)
 		// When a user connects they get their own QueueBind and start sending events to the
 		// channels listened to in Run() and listening for messages on their queue.
-		wsManager.HandleWebSocket(user, c.Writer, c.Request)
-	}, AuthMiddleware(cognitoService))
+		wsManager.HandleWebSocket(user, c)
+	})
 
 	// The health route returns the latest versions for the valheim server and sidecar so users
 	// can be alerted when to delete and re-create their servers.
@@ -93,5 +93,5 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 		handler.HandleRequest(c, kubeService, cognitoService, ctx)
 	})
 
-	return r
+	return r, wsManager
 }

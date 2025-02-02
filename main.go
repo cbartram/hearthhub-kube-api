@@ -46,7 +46,12 @@ func main() {
 	kubeService := service.MakeKubernetesService(kubeConfig)
 	cognitoService := service.MakeCognitoService(cfg)
 
-	err = server.NewRouter(context.Background(), kubeService, cognitoService).Run(fmt.Sprintf(":%v", *port))
+	router, wsManager := server.NewRouter(context.Background(), kubeService, cognitoService)
+
+	defer wsManager.Connection.Close()
+	defer wsManager.Channel.Close()
+
+	err = router.Run(fmt.Sprintf(":%v", *port))
 	if err != nil {
 		log.Fatal("failed to run http server: " + err.Error())
 	}
