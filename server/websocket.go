@@ -23,11 +23,13 @@ type Message struct {
 // Client represents a WebSocket client connection
 type Client struct {
 	conn      *websocket.Conn
+	queueName string
 	discordId string
 }
 
 // WebSocketManager handles multiple WebSocket connections
 type WebSocketManager struct {
+	Channel    *amqp.Channel
 	clients    map[*Client]bool
 	broadcast  chan Message
 	register   chan *Client
@@ -36,94 +38,13 @@ type WebSocketManager struct {
 }
 
 // NewWebSocketManager creates a new WebSocket manager
-func NewWebSocketManager() *WebSocketManager {
-	return &WebSocketManager{
-		clients:    make(map[*Client]bool),
-		broadcast:  make(chan Message),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-	}
-}
-
-// Run Listens to go routine channels for websocket events when clients
-// connect, disconnect, or broadcast a message. This function keeps track
-// of client state like who is connected and disconnected
-func (manager *WebSocketManager) Run() {
-	for {
-		select {
-		case client := <-manager.register:
-			manager.mutex.Lock()
-			manager.clients[client] = true
-			manager.mutex.Unlock()
-			log.Infof("client connected with discord ID: %s", client.discordId)
-
-		case client := <-manager.unregister:
-			if _, ok := manager.clients[client]; ok {
-				manager.mutex.Lock()
-				delete(manager.clients, client)
-				client.conn.Close()
-				manager.mutex.Unlock()
-				log.Infof("client disconnected with discord ID: %s", client.discordId)
-			}
-
-		case message := <-manager.broadcast:
-			manager.mutex.Lock()
-			for client := range manager.clients {
-				// Only send message if it matches the client's discord ID
-				if client.discordId == message.DiscordId {
-					err := client.conn.WriteJSON(message)
-					if err != nil {
-						log.Errorf("error broadcasting to client (%s): %v", client.discordId, err)
-						client.conn.Close()
-						delete(manager.clients, client)
-					}
-				}
-			}
-			manager.mutex.Unlock()
-		}
-	}
-}
-
-func (manager *WebSocketManager) HandleWebSocket(user *service.CognitoUser, w http.ResponseWriter, r *http.Request) {
-	upgrader := websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool {
-			return true // Allow all origins in development
-		},
-	}
-
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Printf("Error upgrading connection: %v", err)
-		return
-	}
-
-	client := &Client{
-		conn:      conn,
-		discordId: user.DiscordID,
-	}
-
-	manager.register <- client
-
-	defer func() {
-		manager.unregister <- client
-	}()
-
-	// Read messages
-	for {
-		_, _, err := conn.ReadMessage()
-		if err != nil {
-			break
-		}
-	}
-}
-
-func (manager *WebSocketManager) ConsumeRabbitMQ() {
+func NewWebSocketManager() (*WebSocketManager, error) {
 	// Connect to RabbitMQ
 	credentials := fmt.Sprintf("%s:%s", os.Getenv("RABBITMQ_DEFAULT_USER"), os.Getenv("RABBITMQ_DEFAULT_PASS"))
 	conn, err := amqp.Dial(fmt.Sprintf("amqp://%s@%s/", credentials, os.Getenv("RABBITMQ_BASE_URL")))
 	if err != nil {
 		log.Errorf("failed to connect to RabbitMQ: %v", err)
-		return
+		return nil, err
 	}
 	defer conn.Close()
 
@@ -133,10 +54,9 @@ func (manager *WebSocketManager) ConsumeRabbitMQ() {
 	}
 	defer ch.Close()
 
-	// Declare exchange
 	err = ch.ExchangeDeclare(
 		"valheim-server-status", // exchange name
-		"topic",                 // exchange type
+		"fanout",                // exchange type
 		true,                    // durable
 		false,                   // auto-deleted
 		false,                   // internal
@@ -147,53 +67,135 @@ func (manager *WebSocketManager) ConsumeRabbitMQ() {
 		log.Fatalf("failed to declare exchange: %v", err)
 	}
 
-	// Declare queue
-	q, err := ch.QueueDeclare(
-		"valheim-server", // queue name
-		false,            // durable
-		true,             // delete when unused
-		false,            // exclusive
-		false,            // no-wait
-		nil,              // arguments
-	)
-	if err != nil {
-		log.Errorf("failed to declare queue: %v", err)
+	return &WebSocketManager{
+		Channel:    ch,
+		clients:    make(map[*Client]bool),
+		broadcast:  make(chan Message),
+		register:   make(chan *Client),
+		unregister: make(chan *Client),
+	}, nil
+}
+
+// Run Listens to go routine channels for websocket events when clients
+// connect, disconnect, or broadcast a message. This function keeps track
+// of client state like who is connected and disconnected
+func (w *WebSocketManager) Run() {
+	for {
+		select {
+		case client := <-w.register:
+			w.mutex.Lock()
+			w.clients[client] = true
+			w.mutex.Unlock()
+			log.Infof("client connected with discord ID: %s", client.discordId)
+
+		case client := <-w.unregister:
+			if _, ok := w.clients[client]; ok {
+				w.mutex.Lock()
+				delete(w.clients, client)
+				client.conn.Close()
+				w.mutex.Unlock()
+				log.Infof("client disconnected with discord ID: %s", client.discordId)
+			}
+		}
+	}
+}
+
+func (w *WebSocketManager) HandleWebSocket(user *service.CognitoUser, writer http.ResponseWriter, r *http.Request) {
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true // Allow all origins in development
+		},
 	}
 
-	// Bind queue to exchange
-	err = ch.QueueBind(
+	conn, err := upgrader.Upgrade(writer, r, nil)
+	if err != nil {
+		log.Printf("Error upgrading connection: %v", err)
+		return
+	}
+
+	// Declare a unique queue for this connection
+	q, err := w.Channel.QueueDeclare(
+		"",    // empty name for auto-generated name
+		false, // non-durable
+		true,  // delete when unused
+		true,  // exclusive
+		false, // no-wait
+		nil,   // arguments
+	)
+	if err != nil {
+		log.Printf("Error declaring queue: %v", err)
+		conn.Close()
+		return
+	}
+
+	// Bind the queue to the exchange with server-specific routing key
+	err = w.Channel.QueueBind(
 		q.Name,                  // queue name
-		"#",                     // routing key
+		user.DiscordID,          // routing key (specific discord ID)
 		"valheim-server-status", // exchange
 		false,
 		nil,
 	)
 	if err != nil {
-		log.Errorf("failed to bind queue: %v", err)
+		log.Printf("Error binding queue: %v", err)
+		conn.Close()
+		return
 	}
 
-	msgs, err := ch.Consume(
+	// Start consuming from the queue
+	msgs, err := w.Channel.Consume(
 		q.Name, // queue
 		"",     // consumer
 		true,   // auto-ack
-		false,  // exclusive
+		true,   // exclusive
 		false,  // no-local
 		false,  // no-wait
 		nil,    // args
 	)
 	if err != nil {
-		log.Errorf("failed to register consumer: %v", err)
+		log.Printf("Error starting consumer: %v", err)
+		conn.Close()
+		return
 	}
 
-	log.Infof("successfully connected to RabbitMQ and waiting for messages...")
+	client := &Client{
+		conn:      conn,
+		queueName: q.Name,
+		discordId: user.DiscordID,
+	}
 
-	// Handle incoming messages
-	for msg := range msgs {
-		var message Message
-		if err := json.Unmarshal(msg.Body, &message); err != nil {
-			log.Printf("Error unmarshaling message: %v", err)
-			continue
+	w.register <- client
+
+	// Every client get's their own QueueBind which is routed by the discord id.
+	// This is why no broadcasting or checking if message discord id = client id is needed
+	// Client's will only consume their messages since they are only sent to their discord id.
+	go func() {
+		for msg := range msgs {
+			var message Message
+			log.Infof("Message received: %s", msg.Type)
+			if err := json.Unmarshal(msg.Body, &message); err != nil {
+				log.Errorf("error unmarshaling message: %v", err)
+				continue
+			}
+
+			err := client.conn.WriteJSON(message)
+			if err != nil {
+				log.Errorf("error sending message to websocket: %v", err)
+				return
+			}
 		}
-		manager.broadcast <- message
+	}()
+
+	defer func() {
+		w.unregister <- client
+		conn.Close()
+	}()
+
+	// Read messages
+	for {
+		_, _, err := conn.ReadMessage()
+		if err != nil {
+			break
+		}
 	}
 }

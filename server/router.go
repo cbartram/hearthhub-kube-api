@@ -40,10 +40,14 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 	serverGroup.Use(AuthMiddleware(cognitoService))
 	modGroup.Use(AuthMiddleware(cognitoService))
 
-	wsManager := NewWebSocketManager()
-
-	go wsManager.Run()
-	go wsManager.ConsumeRabbitMQ()
+	// The connection to RabbitMQ and exchange declaration occurs here.
+	wsManager, err := NewWebSocketManager()
+	if err != nil {
+		logrus.Errorf("error creating websocket manager: %v", err)
+	} else {
+		// This starts listening to client connect and disconnect go routine channels
+		go wsManager.Run()
+	}
 
 	r.GET("/ws", func(c *gin.Context) {
 		tmp, exists := c.Get("user")
@@ -54,6 +58,8 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 		}
 
 		user := tmp.(*service.CognitoUser)
+		// When a user connects they get their own QueueBind and start sending events to the
+		// channels listened to in Run() and listening for messages on their queue.
 		wsManager.HandleWebSocket(user, c.Writer, c.Request)
 	}, AuthMiddleware(cognitoService))
 
