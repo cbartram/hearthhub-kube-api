@@ -144,7 +144,7 @@ func (manager *WebSocketManager) ConsumeRabbitMQ() {
 		nil,                     // arguments
 	)
 	if err != nil {
-		log.Fatalf("Failed to declare exchange: %v", err)
+		log.Fatalf("failed to declare exchange: %v", err)
 	}
 
 	// Declare queue
@@ -152,7 +152,7 @@ func (manager *WebSocketManager) ConsumeRabbitMQ() {
 		"valheim-server", // queue name
 		false,            // durable
 		true,             // delete when unused
-		true,             // exclusive
+		false,            // exclusive
 		false,            // no-wait
 		nil,              // arguments
 	)
