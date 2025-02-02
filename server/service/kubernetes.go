@@ -44,7 +44,7 @@ func (d DeploymentAction) Rollback(clientset kubernetes.Interface) (string, erro
 	if err != nil && !errors.IsNotFound(err) {
 		return d.Deployment.Name, fmt.Errorf("failed to delete deployment: %v", err)
 	}
-	log.Infof("deployment: %s rolled back successfully", d.Deployment.Name)
+	log.Infof("deployment: %s deleted successfully", d.Deployment.Name)
 	return d.Deployment.Name, nil
 }
 
@@ -71,7 +71,7 @@ func (p PVCAction) Rollback(clientset kubernetes.Interface) (string, error) {
 	if err != nil && !errors.IsNotFound(err) {
 		return p.PVC.Name, fmt.Errorf("failed to delete PVC: %v", err)
 	}
-	log.Infof("PVC: %s rolled back successfully", p.PVC.Name)
+	log.Infof("PVC: %s deleted successfully", p.PVC.Name)
 	return p.PVC.Name, nil
 }
 
@@ -135,14 +135,15 @@ func (k *KubernetesServiceImpl) AddAction(action ResourceAction) {
 func (k *KubernetesServiceImpl) ApplyResources() error {
 	for _, resource := range k.ResourceActions {
 		if name, err := resource.Apply(k.Client); err != nil {
-			log.Errorf("Error applying resource: %s err: %v", name, err)
+			log.Errorf("error applying resource: %s err: %v", name, err)
 
+			// TODO Something is buggy here
 			// Rollback all previously applied resources
-			for _, appliedResource := range k.ResourceActions {
-				if name, err := appliedResource.Rollback(k.Client); err != nil {
-					log.Errorf("Error rolling back resource: %s err: %v", name, err)
-				}
-			}
+			//for _, appliedResource := range k.ResourceActions {
+			//	if name, err := appliedResource.Rollback(k.Client); err != nil {
+			//		log.Errorf("error rolling back resource: %s err: %v", name, err)
+			//	}
+			//}
 
 			return fmt.Errorf("failed to apply resource: %s, rolled back changes", name)
 		}

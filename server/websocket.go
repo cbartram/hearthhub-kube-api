@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/cbartram/hearthhub-mod-api/server/service"
 	"github.com/gin-gonic/gin"
 	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
@@ -42,7 +41,6 @@ type WebSocketManager struct {
 // NewWebSocketManager creates a new WebSocket manager
 func NewWebSocketManager() (*WebSocketManager, error) {
 	// Connect to RabbitMQ
-	log.Infof("Attempting to connect to RabbitMQ service: %s", os.Getenv("RABBITMQ_BASE_URL"))
 	credentials := fmt.Sprintf("%s:%s", os.Getenv("RABBITMQ_DEFAULT_USER"), os.Getenv("RABBITMQ_DEFAULT_PASS"))
 	conn, err := amqp.Dial(fmt.Sprintf("amqp://%s@%s/", credentials, os.Getenv("RABBITMQ_BASE_URL")))
 	if err != nil {
@@ -102,9 +100,18 @@ func (w *WebSocketManager) Run() {
 	}
 }
 
-func (w *WebSocketManager) HandleWebSocket(user *service.CognitoUser, c *gin.Context) {
+func (w *WebSocketManager) HandleWebSocket(c *gin.Context) {
+	discordId := c.Query("id")
+
+	if discordId == "" {
+		log.Errorf("no discord id provided")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no discord id provided"})
+		return
+	}
+
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
+			// return r.Host == "http//s3.amazonaws.com/bucket/index.html"
 			return true // Allow all origins in development
 		},
 	}
@@ -118,12 +125,12 @@ func (w *WebSocketManager) HandleWebSocket(user *service.CognitoUser, c *gin.Con
 
 	// Declare a unique queue for this connection
 	q, err := w.Channel.QueueDeclare(
-		fmt.Sprintf("queue-%s", user.DiscordID),
-		false, // non-durable
-		true,  // delete when unused
-		true,  // exclusive
-		false, // no-wait
-		nil,   // arguments
+		"",
+		false,
+		true,
+		true,
+		false,
+		nil,
 	)
 	if err != nil {
 		log.Errorf("error declaring queue: %v", err)
@@ -133,9 +140,9 @@ func (w *WebSocketManager) HandleWebSocket(user *service.CognitoUser, c *gin.Con
 
 	// Bind the queue to the exchange with server-specific routing key
 	err = w.Channel.QueueBind(
-		q.Name,                  // queue name
-		user.DiscordID,          // routing key (specific discord ID)
-		"valheim-server-status", // exchange
+		q.Name,
+		discordId,
+		"valheim-server-status",
 		false,
 		nil,
 	)
@@ -145,15 +152,14 @@ func (w *WebSocketManager) HandleWebSocket(user *service.CognitoUser, c *gin.Con
 		return
 	}
 
-	// Start consuming from the queue
 	msgs, err := w.Channel.Consume(
-		q.Name, // queue
-		"",     // consumer
-		true,   // auto-ack
-		true,   // exclusive
-		false,  // no-local
-		false,  // no-wait
-		nil,    // args
+		q.Name,
+		"",
+		true,
+		true,
+		false,
+		false,
+		nil,
 	)
 	if err != nil {
 		log.Errorf("error starting consumer: %v", err)
@@ -164,7 +170,7 @@ func (w *WebSocketManager) HandleWebSocket(user *service.CognitoUser, c *gin.Con
 	client := &Client{
 		conn:      conn,
 		queueName: q.Name,
-		discordId: user.DiscordID,
+		discordId: discordId,
 	}
 
 	w.register <- client

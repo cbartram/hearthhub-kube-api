@@ -8,6 +8,7 @@ import (
 	"github.com/cbartram/hearthhub-mod-api/server"
 	"github.com/cbartram/hearthhub-mod-api/server/service"
 	"github.com/joho/godotenv"
+	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"log"
@@ -48,12 +49,15 @@ func main() {
 
 	router, wsManager := server.NewRouter(context.Background(), kubeService, cognitoService)
 
-	defer wsManager.Connection.Close()
-	defer wsManager.Channel.Close()
+	defer func() {
+		logrus.Infof("Closing websocket connection and channel")
+		wsManager.Connection.Close()
+		wsManager.Channel.Close()
+	}()
 
+	log.Printf("Server Listening on port %s", *port)
 	err = router.Run(fmt.Sprintf(":%v", *port))
 	if err != nil {
 		log.Fatal("failed to run http server: " + err.Error())
 	}
-	log.Printf("Server Listening on port %s", *port)
 }

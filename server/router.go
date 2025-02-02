@@ -49,19 +49,11 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 		go wsManager.Run()
 	}
 
-	r.GET("/ws", AuthMiddleware(cognitoService), func(c *gin.Context) {
+	r.GET("/ws", func(c *gin.Context) {
 		logrus.Infof("receive new websocket connection")
-		tmp, exists := c.Get("user")
-		if !exists {
-			logrus.Errorf("user not found in context")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "user not found in context"})
-			return
-		}
-
-		user := tmp.(*service.CognitoUser)
 		// When a user connects they get their own QueueBind and start sending events to the
 		// channels listened to in Run() and listening for messages on their queue.
-		wsManager.HandleWebSocket(user, c)
+		wsManager.HandleWebSocket(c)
 	})
 
 	// The health route returns the latest versions for the valheim server and sidecar so users
