@@ -11,4 +11,8 @@ spec:
       targetPort: {{.Values.service.targetPort}}
       protocol: TCP
       nodePort: {{.Values.service.nodePort}}
+      name: http
+    - port: 5672
+      targetPort: 5672
+      name: rabbitmq
   type: {{.Values.service.type}}

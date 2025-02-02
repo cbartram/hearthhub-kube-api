@@ -42,6 +42,7 @@ type WebSocketManager struct {
 // NewWebSocketManager creates a new WebSocket manager
 func NewWebSocketManager() (*WebSocketManager, error) {
 	// Connect to RabbitMQ
+	log.Infof("Attempting to connect to RabbitMQ service: %s", os.Getenv("RABBITMQ_BASE_URL"))
 	credentials := fmt.Sprintf("%s:%s", os.Getenv("RABBITMQ_DEFAULT_USER"), os.Getenv("RABBITMQ_DEFAULT_PASS"))
 	conn, err := amqp.Dial(fmt.Sprintf("amqp://%s@%s/", credentials, os.Getenv("RABBITMQ_BASE_URL")))
 	if err != nil {
@@ -117,7 +118,7 @@ func (w *WebSocketManager) HandleWebSocket(user *service.CognitoUser, c *gin.Con
 
 	// Declare a unique queue for this connection
 	q, err := w.Channel.QueueDeclare(
-		"",    // empty name for auto-generated name
+		fmt.Sprintf("queue-%s", user.DiscordID),
 		false, // non-durable
 		true,  // delete when unused
 		true,  // exclusive

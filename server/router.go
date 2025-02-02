@@ -50,6 +50,7 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 	}
 
 	r.GET("/ws", AuthMiddleware(cognitoService), func(c *gin.Context) {
+		logrus.Infof("receive new websocket connection")
 		tmp, exists := c.Get("user")
 		if !exists {
 			logrus.Errorf("user not found in context")
