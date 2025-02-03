@@ -229,6 +229,21 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 							Image:   fmt.Sprintf("%s:%s", os.Getenv("BACKUP_MANAGER_IMAGE_NAME"), os.Getenv("BACKUP_MANAGER_IMAGE_VERSION")),
 							Command: []string{"sh", "-c"},
 							Args:    []string{"/app/main -mode backup"},
+
+							// Although these actions don't pertain to the actual valheim-server container they do pertain to the same pod so the information
+							// delivered to users will still be quite accurate.
+							Lifecycle: &corev1.Lifecycle{
+								PostStart: &corev1.LifecycleHandler{
+									Exec: &corev1.ExecAction{
+										Command: []string{fmt.Sprintf(`/app/main -mode publish -type PostStart -payload "{\"server:\" \"valheim-%s\"}"`, discordId)},
+									},
+								},
+								PreStop: &corev1.LifecycleHandler{
+									Exec: &corev1.ExecAction{
+										Command: []string{fmt.Sprintf(`/app/main -mode publish -type PreStop -payload "{\"server:\" \"valheim-%s\"}"`, discordId)},
+									},
+								},
+							},
 							// Ensure this container gets AWS creds so it can upload to S3
 							EnvFrom: []corev1.EnvFromSource{
 								{
