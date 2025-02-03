@@ -30,9 +30,9 @@ func (f *FakeKubeClient) AddAction(action service.ResourceAction) {
 	f.Called(action)
 }
 
-func (f *FakeKubeClient) ApplyResources() error {
+func (f *FakeKubeClient) ApplyResources() ([]string, error) {
 	args := f.Called()
-	return args.Error(0)
+	return args.Get(0).([]string), args.Error(1)
 }
 
 func (f *FakeKubeClient) GetActions() []service.ResourceAction {
@@ -49,9 +49,9 @@ func (f *FakeKubeClient) GetClusterIp() (string, error) {
 	return args.String(0), args.Error(1)
 }
 
-func (f *FakeKubeClient) Rollback() error {
+func (f *FakeKubeClient) Rollback() ([]string, error) {
 	args := f.Called()
-	return args.Error(0)
+	return args.Get(0).([]string), args.Error(1)
 }
 
 func TestHandleCreateServerRoute(t *testing.T) {
@@ -138,7 +138,7 @@ func TestHandleCreateServerRoute(t *testing.T) {
 			},
 			requiresCognito: true,
 			requestBody:     bytes.NewBuffer([]byte(`{"world": "foo", "name": "bar", "password": "hereisapassword"}`)),
-			expectedBody:    `{"error":"server:  already exists for user: foobar. use PUT /api/v1/server/scale to manage replicas."}`,
+			expectedBody:    `{"error":"server:  already exists for user: foobar"}`,
 			cognitoAttributes: []types.AttributeType{
 				{
 					Name:  stringPtr("custom:server_details"),
@@ -253,7 +253,7 @@ func TestHandleCreateServerRoute(t *testing.T) {
 			}
 
 			if tt.requiresKube {
-				mockKubeClient.On("ApplyResources").Return(tt.kubeErr)
+				mockKubeClient.On("ApplyResources").Return([]string{"foo", "bar"}, tt.kubeErr)
 				mockKubeClient.On("AddAction", mock.Anything).Return()
 				mockKubeClient.On("GetClusterIp").Return("123.456.789.0", nil)
 

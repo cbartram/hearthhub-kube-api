@@ -85,7 +85,7 @@ func TestHandleDeleteServerRoute(t *testing.T) {
 
 			if tt.requiresKube {
 				mockKubeClient.On("AddAction", mock.Anything).Return()
-				mockKubeClient.On("Rollback").Return(errors.New("oh no"))
+				mockKubeClient.On("Rollback").Return([]string{}, errors.New("oh no"))
 
 				actions := []service.ResourceAction{
 					service.DeploymentAction{

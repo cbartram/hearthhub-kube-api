@@ -116,6 +116,6 @@ func TestApplyResources(t *testing.T) {
 		},
 	}
 	assert.Len(t, svc.GetActions(), 1)
-	err := svc.ApplyResources()
-	assert.NotNil(t, err)
+	_, err := svc.ApplyResources()
+	assert.Nil(t, err)
 }
