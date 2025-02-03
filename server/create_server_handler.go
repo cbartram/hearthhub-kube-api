@@ -235,12 +235,12 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 							Lifecycle: &corev1.Lifecycle{
 								PostStart: &corev1.LifecycleHandler{
 									Exec: &corev1.ExecAction{
-										Command: []string{fmt.Sprintf(`/app/main -mode publish -type PostStart -payload "{\"server:\" \"valheim-%s\"}"`, discordId)},
+										Command: []string{"/app/main", "-mode", "publish", "-type", "PostStart"},
 									},
 								},
 								PreStop: &corev1.LifecycleHandler{
 									Exec: &corev1.ExecAction{
-										Command: []string{fmt.Sprintf(`/app/main -mode publish -type PreStop -payload "{\"server:\" \"valheim-%s\"}"`, discordId)},
+										Command: []string{"/app/main", "-mode", "publish", "-type", "PreStop"},
 									},
 								},
 							},
