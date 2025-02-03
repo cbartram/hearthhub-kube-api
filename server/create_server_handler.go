@@ -114,7 +114,6 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService service.
 	attributes, err := cognito.GetUserAttributes(ctx, &user.Credentials.AccessToken)
 	serverDetails := util.GetAttribute(attributes, "custom:server_details")
 	res := CreateServerResponse{}
-	log.Infof("user attributes: %v", serverDetails)
 	if err != nil {
 		log.Errorf("could not get user attributes: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("could not get user attributes: %s", err)})
@@ -124,7 +123,7 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService service.
 	// If server is nil it's the first time the user is booting up.
 	if serverDetails != "nil" {
 		json.Unmarshal([]byte(serverDetails), &res)
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("server: %s already exists for user: %s. use PUT /api/v1/server/scale to manage replicas.", res.DeploymentName, user.Email)})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("server: %s already exists for user: %s", res.DeploymentName, user.Email)})
 		return
 	}
 
@@ -282,7 +281,7 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 	kubeService.AddAction(&service.PVCAction{PVC: MakePvc(pvcName, deploymentName, discordId)})
 	kubeService.AddAction(&service.DeploymentAction{Deployment: deployment})
 
-	err := kubeService.ApplyResources()
+	names, err := kubeService.ApplyResources()
 	if err != nil {
 		log.Errorf("failed to apply kubernetes resource: %v", err)
 		return nil, err
@@ -301,8 +300,8 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 		ServerIp:       ip,
 		ServerPort:     serverPort,
 		WorldDetails:   *config,
-		PvcName:        kubeService.GetActions()[0].Name(),
-		DeploymentName: kubeService.GetActions()[1].Name(),
+		PvcName:        names[0],
+		DeploymentName: names[1],
 		State:          RUNNING,
 	}, nil
 }

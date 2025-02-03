@@ -44,7 +44,7 @@ func (d *DeleteServerHandler) HandleRequest(c *gin.Context, kubeService service.
 
 	// Delete deployment and pvc before updating cognito to avoid a scenario where the user could spin up more than 1 server
 	// if their cognito gets updated but server deletion fails.
-	err := kubeService.Rollback()
+	names, err := kubeService.Rollback()
 	if err != nil {
 		log.Errorf("error deleting deployment/pvc: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to delete deployment/pvc: %v", err)})
@@ -65,6 +65,7 @@ func (d *DeleteServerHandler) HandleRequest(c *gin.Context, kubeService service.
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": fmt.Sprintf("deleted: valheim-%s", user.DiscordID),
+		"message":   fmt.Sprintf("deleted resources successfully"),
+		"resources": names,
 	})
 }

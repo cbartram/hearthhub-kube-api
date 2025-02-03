@@ -27,9 +27,6 @@ func LogrusMiddleware(logger *logrus.Logger) gin.HandlerFunc {
 // discord id belong to a given refresh token.
 func AuthMiddleware(cognito service.CognitoService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-
-		logrus.Infof("Middleware")
-
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is required"})
