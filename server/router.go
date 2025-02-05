@@ -31,14 +31,10 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 	gin.DefaultErrorWriter = logger.Writer()
 	gin.SetMode(gin.ReleaseMode)
 
+	r.Use(CORSMiddleware(), LogrusMiddleware(logger))
 	apiGroup := r.Group("/api/v1")
-	serverGroup := apiGroup.Group("/server")
-	modGroup := apiGroup.Group("/file")
-
-	// Setup middleware
-	r.Use(LogrusMiddleware(logger))
-	serverGroup.Use(AuthMiddleware(cognitoService))
-	modGroup.Use(AuthMiddleware(cognitoService))
+	serverGroup := apiGroup.Group("/server", CORSMiddleware(), AuthMiddleware(cognitoService))
+	modGroup := apiGroup.Group("/file", CORSMiddleware(), AuthMiddleware(cognitoService))
 
 	// The connection to RabbitMQ and exchange declaration occurs here.
 	wsManager, err := NewWebSocketManager()
@@ -61,8 +57,10 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 	apiGroup.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":                  "OK",
+			"api-version":             os.Getenv("API_VERSION"),
 			"valheim-server-version":  os.Getenv("VALHEIM_IMAGE_VERSION"),
 			"valheim-sidecar-version": os.Getenv("BACKUP_MANAGER_IMAGE_VERSION"),
+			"file-installer-version":  os.Getenv("FILE_MANAGER_IMAGE_VERSION"),
 		})
 	})
 

@@ -12,6 +12,7 @@ data:
   BACKUP_MANAGER_IMAGE_VERSION: {{ .Values.image.backupManagerImageVersion | quote }}
   FILE_MANAGER_IMAGE_NAME: {{ .Values.image.fileManagerImageName | quote }}
   FILE_MANAGER_IMAGE_VERSION:  {{ .Values.image.fileManagerImageVersion | quote }}
+  API_VERSION: {{ .Values.image.tag | quote }}
 
   # API
   AWS_REGION: "us-east-1"
