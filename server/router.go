@@ -69,6 +69,11 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 		handler.HandleRequest(c, kubeService)
 	})
 
+	serverGroup.GET("/", func(c *gin.Context) {
+		handler := GetServerHandler{}
+		handler.HandleRequest(c, cognitoService, ctx)
+	})
+
 	serverGroup.POST("/create", func(c *gin.Context) {
 		handler := CreateServerHandler{}
 		handler.HandleRequest(c, kubeService, cognitoService, ctx)

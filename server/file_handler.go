@@ -100,6 +100,7 @@ func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService service.K
 		return
 	}
 
+	// TODO Notify rabbitmq that the file install job has started
 	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("file job created: %s", *name)})
 }
 

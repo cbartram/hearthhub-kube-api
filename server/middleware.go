@@ -75,7 +75,7 @@ func AuthMiddleware(cognito service.CognitoService) gin.HandlerFunc {
 
 		user, err := cognito.AuthUser(context.Background(), &refreshToken, &discordID)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("could not authenticate user with refresh token: %s", err)})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("could not authenticate user with refresh token: %s", err)})
 			return
 		}
 
