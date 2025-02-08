@@ -40,5 +40,5 @@ func (g *GetServerHandler) HandleRequest(c *gin.Context, cognito service.Cognito
 	}
 
 	log.Infof("no server exists for user: %s", user.DiscordID)
-	c.JSON(http.StatusNoContent, gin.H{"message": fmt.Sprintf("no server exists for user: %s", user.DiscordID)})
+	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("no server exists for user: %s", user.DiscordID)})
 }
