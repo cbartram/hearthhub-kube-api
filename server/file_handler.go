@@ -100,7 +100,6 @@ func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService service.K
 		return
 	}
 
-	// TODO Notify rabbitmq that the file install job has started
 	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("file job created: %s", *name)})
 }
 
@@ -153,6 +152,20 @@ func CreateFileJob(clientset kubernetes.Interface, payload *FilePayload, user *s
 									SecretRef: &corev1.SecretEnvSource{
 										LocalObjectReference: corev1.LocalObjectReference{
 											Name: "aws-creds",
+										},
+									},
+								},
+								{
+									SecretRef: &corev1.SecretEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "rabbitmq-secrets",
+										},
+									},
+								},
+								{
+									SecretRef: &corev1.SecretEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "cognito-secrets",
 										},
 									},
 								},
