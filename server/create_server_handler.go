@@ -128,7 +128,7 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService service.
 	}
 
 	config := MakeConfigWithDefaults(&reqBody)
-	valheimServer, err := CreateDedicatedServerDeployment(config, kubeService, user.DiscordID)
+	valheimServer, err := CreateDedicatedServerDeployment(config, kubeService, user)
 	if err != nil {
 		log.Errorf("could not create dedicated server deployment: %s", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create dedicated server deployment: " + err.Error()})
@@ -154,20 +154,20 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService service.
 }
 
 // CreateDedicatedServerDeployment Creates the valheim dedicated server deployment and pvc given the server configuration.
-func CreateDedicatedServerDeployment(config *Config, kubeService service.KubernetesService, discordId string) (*CreateServerResponse, error) {
+func CreateDedicatedServerDeployment(config *Config, kubeService service.KubernetesService, user *service.CognitoUser) (*CreateServerResponse, error) {
 	serverArgs := config.ToStringArgs()
 	serverPort, _ := strconv.Atoi(config.Port)
 
 	// Deployments & PVC are always tied to the discord ID. When a server is terminated and re-created it
 	// will be made with a different pod name but the same deployment name making for easy replica scaling.
-	pvcName := fmt.Sprintf("valheim-pvc-%s", discordId)
-	deploymentName := fmt.Sprintf("valheim-%s", discordId)
+	pvcName := fmt.Sprintf("valheim-pvc-%s", user.DiscordID)
+	deploymentName := fmt.Sprintf("valheim-%s", user.DiscordID)
 
 	log.Infof("server args: %v", serverArgs)
 	labels := map[string]string{
 		"app":               "valheim",
 		"created-by":        deploymentName,
-		"tenant-discord-id": discordId,
+		"tenant-discord-id": user.DiscordID,
 	}
 
 	// Create deployment object
@@ -227,7 +227,7 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 							Name:    "backup-manager",
 							Image:   fmt.Sprintf("%s:%s", os.Getenv("BACKUP_MANAGER_IMAGE_NAME"), os.Getenv("BACKUP_MANAGER_IMAGE_VERSION")),
 							Command: []string{"sh", "-c"},
-							Args:    []string{"/app/main -mode backup"},
+							Args:    []string{fmt.Sprintf("/app/main -mode backup -token %s", user.Credentials.RefreshToken)},
 
 							// Although these actions don't pertain to the actual valheim-server container they do pertain to the same pod so the information
 							// delivered to users will still be quite accurate.
@@ -260,6 +260,15 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 										},
 									},
 								},
+								// Required so backups which are persisted to s3 can also update user attributes
+								// letting the frontend know which backups are auto installed.
+								{
+									SecretRef: &corev1.SecretEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "cognito-secrets",
+										},
+									},
+								},
 								// AWS_REGION, RABBITMQ_BASE_URL and BACKUP_FREQ env vars are part of this CM which are also required
 								{
 									ConfigMapRef: &corev1.ConfigMapEnvSource{
@@ -278,7 +287,7 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 		},
 	}
 
-	kubeService.AddAction(&service.PVCAction{PVC: MakePvc(pvcName, deploymentName, discordId)})
+	kubeService.AddAction(&service.PVCAction{PVC: MakePvc(pvcName, deploymentName, user.DiscordID)})
 	kubeService.AddAction(&service.DeploymentAction{Deployment: deployment})
 
 	names, err := kubeService.ApplyResources()
