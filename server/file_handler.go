@@ -17,7 +17,6 @@ import (
 	"k8s.io/utils/ptr"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 )
 
@@ -106,13 +105,11 @@ func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService service.K
 // CreateFileJob Creates a new kubernetes job which attaches the valheim server PVC, downloads mods from S3,
 // and installs mods onto the PVC before restarting the Valheim server.
 func CreateFileJob(clientset kubernetes.Interface, payload *FilePayload, user *service.CognitoUser) (*string, error) {
-	fileName := filepath.Base(*payload.Prefix)
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: fmt.Sprintf("mod-install-%s-", user.DiscordID),
 			Labels: map[string]string{
 				"tenant-discord-id": user.DiscordID,
-				"file-name":         fileName,
 			},
 			Namespace: "hearthhub",
 		},
