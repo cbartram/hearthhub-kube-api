@@ -24,7 +24,7 @@ image:
   backupManagerImageName: "cbartram/hearthhub-sidecar"
   backupManagerImageVersion: "0.0.14"
   fileManagerImageName: "cbartram/hearthhub-plugin-manager"
-  fileManagerImageVersion: "0.0.15"
+  fileManagerImageVersion: "0.0.16"
 
 imagePullSecrets: []
 serviceAccountName: hearthhub-api-sa
