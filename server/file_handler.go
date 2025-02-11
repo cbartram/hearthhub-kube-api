@@ -38,7 +38,7 @@ func (f *FilePayload) Validate() error {
 
 	validDestination := false
 	for _, dest := range validDestinations {
-		if strings.HasPrefix(dest, f.Destination) {
+		if strings.HasPrefix(f.Destination, dest) {
 			validDestination = true
 			break
 		}

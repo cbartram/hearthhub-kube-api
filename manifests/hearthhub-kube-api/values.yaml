@@ -15,7 +15,7 @@ image:
   pullPolicy: IfNotPresent
 
   # Tag for the API itself
-  tag: "0.0.53"
+  tag: "0.0.54"
 
   # Versions for images the API is responsible for deploying
   # i.e. sidecar container, valheim server, and mod/file manager
