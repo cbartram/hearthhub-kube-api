@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type FilePayload struct {
@@ -37,17 +38,17 @@ func (f *FilePayload) Validate() error {
 
 	validDestination := false
 	for _, dest := range validDestinations {
-		if f.Destination == dest {
+		if strings.HasPrefix(dest, f.Destination) {
 			validDestination = true
 			break
 		}
 	}
 	if !validDestination {
-		return errors.New("invalid destination: must be one of /root/.config/unity3d/IronGate/Valheim/worlds_local, /valheim/BepInEx/config, or /valheim/BepInEx/plugins")
+		return errors.New("invalid destination: must be prefixed by /root/.config/unity3d/IronGate/Valheim/worlds_local, /valheim/BepInEx/config, or /valheim/BepInEx/plugins")
 	}
 
 	// Validate Operation
-	validOperations := []string{"write", "delete"}
+	validOperations := []string{"write", "delete", "copy"}
 	validOperation := false
 	for _, op := range validOperations {
 		if f.Operation == op {
@@ -56,7 +57,7 @@ func (f *FilePayload) Validate() error {
 		}
 	}
 	if !validOperation {
-		return errors.New("invalid operation: must be either 'write' or 'delete'")
+		return errors.New("invalid operation: must be either 'write', 'copy', or 'delete'")
 	}
 
 	if f.Prefix == nil {
