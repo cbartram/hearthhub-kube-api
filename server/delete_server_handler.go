@@ -56,6 +56,14 @@ func (d *DeleteServerHandler) HandleRequest(c *gin.Context, kubeService service.
 			Name:  aws.String("custom:server_details"),
 			Value: aws.String("nil"),
 		},
+		{
+			Name:  aws.String("custom:installed_mods"),
+			Value: aws.String("[]"),
+		},
+		{
+			Name:  aws.String("custom:installed_backups"),
+			Value: aws.String("[]"),
+		},
 	})
 
 	if err != nil {

@@ -139,7 +139,14 @@ func (k *KubernetesServiceImpl) ApplyResources() ([]string, error) {
 	for _, resource := range k.ResourceActions {
 		name, err := resource.Apply(k.Client)
 		if err != nil {
-			log.Errorf("error applying resource: %s err: %v", name, err)
+			log.Errorf("error applying resource rolling back: %s err: %v", name, err)
+			deletedResources, err := resource.Rollback(k.Client)
+			if err != nil {
+				log.Errorf("error rolling back: %s err: %v", name, err)
+				return nil, err
+			}
+			log.Infof("deleted resource(s): %s", deletedResources)
+			continue
 		} else {
 			count++
 		}

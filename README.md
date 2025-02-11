@@ -94,6 +94,14 @@ cluster does not run in a VM and shares the host network space.
 Finally run: `./scripts/cluster_init.sh` to initialize the required ingress and load balancer controllers, namespaces, and secrets. See [Deploying
 the API](#deploying-valheim-server-and-hearthhub-api) for more information on how to deploy.
 
+To restart K3's and apply any new kubelet-arg's run:
+
+```shell
+sudo systemctl stop k3s
+sudo systemctl daemon-reload
+sudo systemctl start k3s
+```
+
 ### MiniKube (Deprecated)
 
 :warning: We do not recommend using MiniKube because of networking issues exposing the API to the internet. See [k3s instead](#k3s).
