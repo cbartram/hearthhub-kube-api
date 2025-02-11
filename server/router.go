@@ -56,7 +56,6 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 	// can be alerted when to delete and re-create their servers.
 	apiGroup.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"status":                  "OK",
 			"api-version":             os.Getenv("API_VERSION"),
 			"valheim-server-version":  os.Getenv("VALHEIM_IMAGE_VERSION"),
 			"valheim-sidecar-version": os.Getenv("BACKUP_MANAGER_IMAGE_VERSION"),
@@ -81,6 +80,11 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 
 	serverGroup.DELETE("/delete", func(c *gin.Context) {
 		handler := DeleteServerHandler{}
+		handler.HandleRequest(c, kubeService, cognitoService, ctx)
+	})
+
+	serverGroup.PUT("/update", func(c *gin.Context) {
+		handler := PatchServerHandler{}
 		handler.HandleRequest(c, kubeService, cognitoService, ctx)
 	})
 

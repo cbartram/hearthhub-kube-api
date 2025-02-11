@@ -179,6 +179,12 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: util.Int32Ptr(1),
+			// Important: this ensures old pods are deleted before new ones are created. It results in server downtime
+			// but ensures that we don't get stuck with 2 servers trying to start without enough resources while 1 gets
+			// caught in a pending scheduling loop.
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RecreateDeploymentStrategyType,
+			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
