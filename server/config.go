@@ -62,6 +62,9 @@ type Modifier struct {
 // MakeConfigWithDefaults creates a new ServerConfig with default values
 // that can be selectively overridden by provided options
 func MakeConfigWithDefaults(options *CreateServerRequest) *Config {
+	cpuLimit, _ := strconv.Atoi(os.Getenv("CPU_LIMIT"))
+	memLimit, _ := strconv.Atoi(os.Getenv("MEMORY_LIMIT"))
+
 	config := &Config{
 		Name:                  *options.Name,
 		World:                 *options.World,
@@ -75,31 +78,29 @@ func MakeConfigWithDefaults(options *CreateServerRequest) *Config {
 		InitialBackupSeconds:  7200,
 		BackupIntervalSeconds: 43200,
 		Modifiers:             []Modifier{},
-		CpuRequest:            *options.CpuRequest,
-		MemoryRequest:         *options.MemoryRequest,
 	}
 
-	cpuLimit, _ := strconv.Atoi(os.Getenv("CPU_LIMIT"))
-	memLimit, _ := strconv.Atoi(os.Getenv("MEMORY_LIMIT"))
-
+	// If no cpu/memory were provided (nil) default to the limits. If cpu and mem were provided
+	// but are greater than the limits set to the limits, finally cpu and mem were provided and within the limits
+	// so set to the provided value
 	if options.CpuRequest == nil {
 		log.Infof("no cpu request specified in req: defaulting to limit: %d", cpuLimit)
 		config.CpuRequest = cpuLimit
+	} else if *options.CpuRequest > cpuLimit {
+		log.Infof("CPU limit (%d) exceeds maximum CPU limit (%d)", *options.CpuRequest, cpuLimit)
+		config.CpuRequest = cpuLimit
+	} else {
+		config.CpuRequest = *options.CpuRequest
 	}
 
 	if options.MemoryRequest == nil {
 		log.Infof("no memory request specified in req: defaulting to limit: %d", memLimit)
 		config.MemoryRequest = memLimit
-	}
-
-	if *options.CpuRequest > cpuLimit {
-		log.Infof("CPU limit (%d) exceeds maximum CPU limit (%d)", *options.CpuRequest, cpuLimit)
-		config.CpuRequest = cpuLimit
-	}
-
-	if *options.MemoryRequest > memLimit {
+	} else if *options.MemoryRequest > memLimit {
 		log.Infof("memory request (%d) exceeds maximum memory limit (%d)", *options.MemoryRequest, memLimit)
 		config.MemoryRequest = memLimit
+	} else {
+		config.MemoryRequest = *options.MemoryRequest
 	}
 
 	// Override defaults with any provided options

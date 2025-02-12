@@ -28,6 +28,6 @@ data:
 
   # Resources for valheim server
   CPU_REQUEST: "2"
-  MEMORY_REQUEST: "6Gi"
+  MEMORY_REQUEST: "6"
   CPU_LIMIT: "2"
-  MEMORY_LIMIT: "6Gi"
+  MEMORY_LIMIT: "6"

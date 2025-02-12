@@ -226,11 +226,11 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
 									corev1.ResourceCPU:    resource.MustParse(strconv.Itoa(config.CpuRequest)),
-									corev1.ResourceMemory: resource.MustParse(strconv.Itoa(config.MemoryRequest)),
+									corev1.ResourceMemory: resource.MustParse(strconv.Itoa(config.MemoryRequest) + "Gi"),
 								},
 								Requests: corev1.ResourceList{
 									corev1.ResourceCPU:    resource.MustParse(strconv.Itoa(config.CpuRequest)),
-									corev1.ResourceMemory: resource.MustParse(strconv.Itoa(config.MemoryRequest)),
+									corev1.ResourceMemory: resource.MustParse(strconv.Itoa(config.MemoryRequest) + "Gi"),
 								},
 							},
 							VolumeMounts: MakeVolumeMounts(),
@@ -306,6 +306,10 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 	if err != nil {
 		log.Errorf("failed to apply kubernetes resource: %v", err)
 		return nil, err
+	}
+
+	if len(names) != 2 {
+		return nil, errors.New(fmt.Sprintf("failed to apply all kubernetes resources (%d/2)", len(names)))
 	}
 
 	ip, err := kubeService.GetClusterIp()

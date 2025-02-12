@@ -138,15 +138,13 @@ func (k *KubernetesServiceImpl) ApplyResources() ([]string, error) {
 	var appliedNames []string
 	for _, resource := range k.ResourceActions {
 		name, err := resource.Apply(k.Client)
+
+		// When 1 resource fails to apply rollback all resources to preserve cluster state
 		if err != nil {
 			log.Errorf("error applying resource rolling back: %s err: %v", name, err)
-			deletedResources, err := resource.Rollback(k.Client)
-			if err != nil {
-				log.Errorf("error rolling back: %s err: %v", name, err)
-				return nil, err
-			}
+			deletedResources, _ := k.Rollback()
 			log.Infof("deleted resource(s): %s", deletedResources)
-			continue
+			break
 		} else {
 			count++
 		}
