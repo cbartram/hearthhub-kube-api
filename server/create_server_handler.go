@@ -72,6 +72,8 @@ type CreateServerResponse struct {
 	ServerPort     int    `json:"server_port"`
 	ServerMemory   int    `json:"server_memory"`
 	ServerCpu      int    `json:"server_cpu"`
+	CpuLimit       int    `json:"cpu_limit"`
+	MemoryLimit    int    `json:"memory_limit"`
 	WorldDetails   Config `json:"world_details"`
 	PvcName        string `json:"mod_pvc_name"`
 	DeploymentName string `json:"deployment_name"`
@@ -311,6 +313,9 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 		log.Errorf("failed to get cluster ip: %v", err)
 	}
 
+	cpuLimit, _ := strconv.Atoi(os.Getenv("CPU_LIMIT"))
+	memLimit, _ := strconv.Atoi(os.Getenv("MEMORY_LIMIT"))
+
 	// Rm the instance id from the response it's not useful for users and makes
 	// testing harder since it generates a pseudo-random alphanumeric string with
 	// each invocation
@@ -320,6 +325,8 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 		ServerPort:     serverPort,
 		ServerCpu:      config.CpuRequest,
 		ServerMemory:   config.MemoryRequest,
+		CpuLimit:       cpuLimit,
+		MemoryLimit:    memLimit,
 		WorldDetails:   *config,
 		PvcName:        names[0],
 		DeploymentName: names[1],
