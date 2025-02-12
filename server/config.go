@@ -3,6 +3,8 @@ package server
 import (
 	"fmt"
 	"github.com/cbartram/hearthhub-mod-api/server/util"
+	log "github.com/sirupsen/logrus"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -38,6 +40,8 @@ const (
 type Config struct {
 	Name                  string     `json:"name"`
 	World                 string     `json:"world"`
+	CpuRequest            int        `json:"cpu_requests"`
+	MemoryRequest         int        `json:"memory_requests"`
 	Port                  string     `json:"port"`
 	Password              string     `json:"password"`
 	EnableCrossplay       bool       `json:"enable_crossplay"`
@@ -71,6 +75,31 @@ func MakeConfigWithDefaults(options *CreateServerRequest) *Config {
 		InitialBackupSeconds:  7200,
 		BackupIntervalSeconds: 43200,
 		Modifiers:             []Modifier{},
+		CpuRequest:            *options.CpuRequest,
+		MemoryRequest:         *options.MemoryRequest,
+	}
+
+	cpuLimit, _ := strconv.Atoi(os.Getenv("CPU_LIMIT"))
+	memLimit, _ := strconv.Atoi(os.Getenv("MEMORY_LIMIT"))
+
+	if options.CpuRequest == nil {
+		log.Infof("no cpu request specified in req: defaulting to limit: %d", cpuLimit)
+		config.CpuRequest = cpuLimit
+	}
+
+	if options.MemoryRequest == nil {
+		log.Infof("no memory request specified in req: defaulting to limit: %d", memLimit)
+		config.MemoryRequest = memLimit
+	}
+
+	if *options.CpuRequest > cpuLimit {
+		log.Infof("CPU limit (%d) exceeds maximum CPU limit (%d)", *options.CpuRequest, cpuLimit)
+		config.CpuRequest = cpuLimit
+	}
+
+	if *options.MemoryRequest > memLimit {
+		log.Infof("memory request (%d) exceeds maximum memory limit (%d)", *options.MemoryRequest, memLimit)
+		config.MemoryRequest = memLimit
 	}
 
 	// Override defaults with any provided options

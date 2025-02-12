@@ -23,6 +23,8 @@ import (
 type CreateServerRequest struct {
 	Name                  *string    `json:"name"`
 	World                 *string    `json:"world"`
+	MemoryRequest         *int       `json:"memoryRequest"`
+	CpuRequest            *int       `json:"cpuRequest"`
 	Password              *string    `json:"password"`
 	Port                  *string    `json:"port"`
 	EnableCrossplay       *bool      `json:"enable_crossplay,omitempty"`
@@ -68,6 +70,8 @@ func (c *CreateServerRequest) Validate() error {
 type CreateServerResponse struct {
 	ServerIp       string `json:"server_ip"`
 	ServerPort     int    `json:"server_port"`
+	ServerMemory   int    `json:"server_memory"`
+	ServerCpu      int    `json:"server_cpu"`
 	WorldDetails   Config `json:"world_details"`
 	PvcName        string `json:"mod_pvc_name"`
 	DeploymentName string `json:"deployment_name"`
@@ -163,7 +167,7 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 	pvcName := fmt.Sprintf("valheim-pvc-%s", user.DiscordID)
 	deploymentName := fmt.Sprintf("valheim-%s", user.DiscordID)
 
-	log.Infof("server args: %v", serverArgs)
+	log.Infof("server requests/limits: cpu=%d mem=%d, server args: %v", config.CpuRequest, config.MemoryRequest, serverArgs)
 	labels := map[string]string{
 		"app":               "valheim",
 		"created-by":        deploymentName,
@@ -212,19 +216,19 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 										Command: []string{"/valheim/health_check.sh"},
 									},
 								},
-								InitialDelaySeconds: 30, // This value sets the min time it takes to "start" the server. Need to get a better idea of what a normal range for this is.
+								InitialDelaySeconds: 15, // This value sets the min time it takes to "start" the server.
 								PeriodSeconds:       10,
 								SuccessThreshold:    1,
 								FailureThreshold:    25, // Essentially 250 extra seconds for the server to startup
 							},
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse(os.Getenv("CPU_LIMIT")),
-									corev1.ResourceMemory: resource.MustParse(os.Getenv("MEMORY_LIMIT")),
+									corev1.ResourceCPU:    resource.MustParse(strconv.Itoa(config.CpuRequest)),
+									corev1.ResourceMemory: resource.MustParse(strconv.Itoa(config.MemoryRequest)),
 								},
 								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse(os.Getenv("CPU_REQUEST")),
-									corev1.ResourceMemory: resource.MustParse(os.Getenv("MEMORY_REQUEST")),
+									corev1.ResourceCPU:    resource.MustParse(strconv.Itoa(config.CpuRequest)),
+									corev1.ResourceMemory: resource.MustParse(strconv.Itoa(config.MemoryRequest)),
 								},
 							},
 							VolumeMounts: MakeVolumeMounts(),
@@ -314,6 +318,8 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 	return &CreateServerResponse{
 		ServerIp:       ip,
 		ServerPort:     serverPort,
+		ServerCpu:      config.CpuRequest,
+		ServerMemory:   config.MemoryRequest,
 		WorldDetails:   *config,
 		PvcName:        names[0],
 		DeploymentName: names[1],
