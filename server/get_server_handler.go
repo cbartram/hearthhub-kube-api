@@ -40,24 +40,23 @@ func (g *GetServerHandler) HandleRequest(c *gin.Context, cognito service.Cognito
 		return
 	}
 
+	cpuLimit, _ := strconv.Atoi(os.Getenv("CPU_LIMIT"))
+	memLimit, _ := strconv.Atoi(os.Getenv("MEMORY_LIMIT"))
+
+	response := GetServerResponse{
+		Servers:     []CreateServerResponse{},
+		CpuLimit:    cpuLimit,
+		MemoryLimit: memLimit,
+	}
+
 	// If server is nil it's the first time the user is booting up.
 	if serverDetails != "nil" {
 		json.Unmarshal([]byte(serverDetails), &server)
-
-		cpuLimit, _ := strconv.Atoi(os.Getenv("CPU_LIMIT"))
-		memLimit, _ := strconv.Atoi(os.Getenv("MEMORY_LIMIT"))
-
-		response := GetServerResponse{
-			Servers: []CreateServerResponse{
-				server,
-			},
-			CpuLimit:    cpuLimit,
-			MemoryLimit: memLimit,
-		}
+		response.Servers = append(response.Servers, server)
 		c.JSON(http.StatusOK, response)
 		return
 	}
 
 	log.Infof("no server exists for user: %s", user.DiscordID)
-	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("no server exists for user: %s", user.DiscordID)})
+	c.JSON(http.StatusOK, response)
 }
