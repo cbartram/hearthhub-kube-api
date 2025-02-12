@@ -23,8 +23,8 @@ import (
 type CreateServerRequest struct {
 	Name                  *string    `json:"name"`
 	World                 *string    `json:"world"`
-	MemoryRequest         *int       `json:"memoryRequest"`
-	CpuRequest            *int       `json:"cpuRequest"`
+	MemoryRequest         *int       `json:"memory_request"`
+	CpuRequest            *int       `json:"cpu_request"`
 	Password              *string    `json:"password"`
 	Port                  *string    `json:"port"`
 	EnableCrossplay       *bool      `json:"enable_crossplay,omitempty"`

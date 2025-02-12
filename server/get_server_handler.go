@@ -9,9 +9,17 @@ import (
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"net/http"
+	"os"
+	"strconv"
 )
 
 type GetServerHandler struct{}
+
+type GetServerResponse struct {
+	Servers     []CreateServerResponse `json:"servers"`
+	CpuLimit    int                    `json:"cpu_limit"`
+	MemoryLimit int                    `json:"memory_limit"`
+}
 
 func (g *GetServerHandler) HandleRequest(c *gin.Context, cognito service.CognitoService, ctx context.Context) {
 	tmp, exists := c.Get("user")
@@ -25,7 +33,7 @@ func (g *GetServerHandler) HandleRequest(c *gin.Context, cognito service.Cognito
 
 	attributes, err := cognito.GetUserAttributes(ctx, &user.Credentials.AccessToken)
 	serverDetails := util.GetAttribute(attributes, "custom:server_details")
-	res := CreateServerResponse{}
+	server := CreateServerResponse{}
 	if err != nil {
 		log.Errorf("could not get user attributes: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("could not get user attributes: %s", err)})
@@ -34,8 +42,19 @@ func (g *GetServerHandler) HandleRequest(c *gin.Context, cognito service.Cognito
 
 	// If server is nil it's the first time the user is booting up.
 	if serverDetails != "nil" {
-		json.Unmarshal([]byte(serverDetails), &res)
-		c.JSON(http.StatusOK, res)
+		json.Unmarshal([]byte(serverDetails), &server)
+
+		cpuLimit, _ := strconv.Atoi(os.Getenv("CPU_LIMIT"))
+		memLimit, _ := strconv.Atoi(os.Getenv("MEMORY_LIMIT"))
+
+		response := GetServerResponse{
+			Servers: []CreateServerResponse{
+				server,
+			},
+			CpuLimit:    cpuLimit,
+			MemoryLimit: memLimit,
+		}
+		c.JSON(http.StatusOK, response)
 		return
 	}
 
