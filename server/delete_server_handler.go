@@ -62,7 +62,7 @@ func (d *DeleteServerHandler) HandleRequest(c *gin.Context, kubeService service.
 		},
 		{
 			Name:  aws.String("custom:installed_backups"),
-			Value: aws.String("[]"),
+			Value: aws.String("{}"),
 		},
 	})
 
