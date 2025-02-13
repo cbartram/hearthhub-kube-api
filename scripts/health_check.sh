@@ -1,5 +1,5 @@
 #!/bin/sh
-if grep -q "Game server connected" /valheim/output.log; then
+if grep -q "with join code" /valheim/BepInEx/config/server-logs.txt; then
     echo "Server started!"
     exit 0
 else
