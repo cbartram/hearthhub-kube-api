@@ -151,6 +151,10 @@ func (c *Config) ToStringArgs() string {
 		sb.WriteString(fmt.Sprintf("-modifier %s %s ", modifier.ModifierKey, modifier.ModifierValue))
 	}
 
+	// Write the logs to a shared mount on the pvc so that the sidecar can tail these looking
+	// for the join code.
+	sb.WriteString("-logFile /valheim/BepInEx/config/server-logs.txt")
+
 	sb.WriteString("| tee /valheim/output.log")
 	return args + sb.String()
 }
