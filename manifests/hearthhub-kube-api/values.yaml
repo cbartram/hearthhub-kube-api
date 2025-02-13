@@ -22,7 +22,7 @@ image:
   valheimImageName: "cbartram/hearthhub"
   valheimImageVersion: "0.0.9"
   backupManagerImageName: "cbartram/hearthhub-sidecar"
-  backupManagerImageVersion: "0.0.25"
+  backupManagerImageVersion: "0.0.26"
   fileManagerImageName: "cbartram/hearthhub-plugin-manager"
   fileManagerImageVersion: "0.0.26"
 
