@@ -54,7 +54,7 @@ RUN apt-get update && apt-get install -y \
 
 
 WORKDIR /valheim
-RUN cp ./steamclient.so /usr/lib && touch /valheim/output.log
+RUN cp ./steamclient.so /usr/lib
 COPY ./scripts/health_check.sh .
 
 # Install BepInEx
