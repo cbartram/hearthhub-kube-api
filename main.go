@@ -46,8 +46,21 @@ func main() {
 
 	kubeService := service.MakeKubernetesService(kubeConfig)
 	cognitoService := service.MakeCognitoService(cfg)
+	discordService, err := service.MakeDiscordService()
+	if err != nil {
+		log.Fatalf("failed to make discord service: %v", err)
+	}
+	s3Service, err := service.MakeS3Service("us-east-1")
+	if err != nil {
+		logrus.Fatalf("failed to create S3 service: %v", err)
+	}
 
-	router, wsManager := server.NewRouter(context.Background(), kubeService, cognitoService)
+	router, wsManager := server.NewRouter(context.Background(), &server.ServiceWrapper{
+		DiscordService: discordService,
+		S3Service:      s3Service,
+		CognitoService: cognitoService,
+		KubeService:    kubeService,
+	})
 
 	defer func() {
 		logrus.Infof("Closing websocket connection and channel")

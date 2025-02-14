@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"github.com/cbartram/hearthhub-mod-api/server/handler"
+	"github.com/cbartram/hearthhub-mod-api/server/handler/cognito"
 	"github.com/cbartram/hearthhub-mod-api/server/service"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
@@ -10,8 +12,15 @@ import (
 	"os"
 )
 
+type ServiceWrapper struct {
+	DiscordService *service.DiscordService
+	S3Service      *service.S3Service
+	CognitoService service.CognitoService
+	KubeService    service.KubernetesService
+}
+
 // NewRouter Create a new gin router and instantiates the routes and route handlers for the entire API.
-func NewRouter(ctx context.Context, kubeService service.KubernetesService, cognitoService service.CognitoService) (*gin.Engine, *WebSocketManager) {
+func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebSocketManager) {
 	logger := logrus.New()
 	logger.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp: false,
@@ -33,8 +42,9 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 
 	r.Use(CORSMiddleware(), LogrusMiddleware(logger))
 	apiGroup := r.Group("/api/v1")
-	serverGroup := apiGroup.Group("/server", CORSMiddleware(), AuthMiddleware(cognitoService))
-	modGroup := apiGroup.Group("/file", CORSMiddleware(), AuthMiddleware(cognitoService))
+	serverGroup := apiGroup.Group("/server", CORSMiddleware(), AuthMiddleware(wrapper.CognitoService))
+	modGroup := apiGroup.Group("/file", CORSMiddleware(), AuthMiddleware(wrapper.CognitoService))
+	cognitoGroup := apiGroup.Group("/cognito", CORSMiddleware())
 
 	// The connection to RabbitMQ and exchange declaration occurs here.
 	wsManager, err := NewWebSocketManager()
@@ -63,34 +73,69 @@ func NewRouter(ctx context.Context, kubeService service.KubernetesService, cogni
 		})
 	})
 
+	apiGroup.POST("/discord/oauth", func(c *gin.Context) {
+		h := handler.DiscordRequestHandler{}
+		h.HandleRequest(c, wrapper.DiscordService)
+	})
+
+	apiGroup.GET("/file", func(c *gin.Context) {
+		h := handler.FileHandler{}
+		h.HandleRequest(c, wrapper.S3Service, wrapper.CognitoService)
+	})
+
+	apiGroup.POST("/file/upload", func(c *gin.Context) {
+		h := handler.UploadFileHandler{}
+		h.HandleRequest(c, wrapper.S3Service, wrapper.CognitoService)
+	})
+
+	cognitoGroup.POST("/create-user", func(c *gin.Context) {
+		h := cognito.CreateUserRequestHandler{}
+		h.HandleRequest(c, ctx, wrapper.CognitoService)
+	})
+
+	cognitoGroup.POST("/auth", func(c *gin.Context) {
+		h := cognito.AuthHandler{}
+		h.HandleRequest(c, ctx, wrapper.CognitoService)
+	})
+
+	cognitoGroup.POST("/refresh-session", func(c *gin.Context) {
+		h := cognito.RefreshSessionHandler{}
+		h.HandleRequest(c, ctx, wrapper.CognitoService)
+	})
+
+	cognitoGroup.GET("/get-user", func(c *gin.Context) {
+		h := cognito.GetUserHandler{}
+		h.HandleRequest(c, ctx, wrapper.CognitoService)
+	})
+
 	modGroup.POST("/install", func(c *gin.Context) {
-		handler := InstallFileHandler{}
-		handler.HandleRequest(c, kubeService)
+		h := InstallFileHandler{}
+		h.HandleRequest(c, wrapper.KubeService)
 	})
 
 	serverGroup.GET("/", func(c *gin.Context) {
-		handler := GetServerHandler{}
-		handler.HandleRequest(c, cognitoService, ctx)
+		h := GetServerHandler{}
+		h.HandleRequest(c, wrapper.CognitoService, ctx)
 	})
 
 	serverGroup.POST("/create", func(c *gin.Context) {
-		handler := CreateServerHandler{}
-		handler.HandleRequest(c, kubeService, cognitoService, ctx)
+		h := CreateServerHandler{}
+		h.HandleRequest(c, wrapper.KubeService, wrapper.CognitoService, ctx)
 	})
 
 	serverGroup.DELETE("/delete", func(c *gin.Context) {
-		handler := DeleteServerHandler{}
-		handler.HandleRequest(c, kubeService, cognitoService, ctx)
+		h := DeleteServerHandler{}
+		h.HandleRequest(c, wrapper.KubeService, wrapper.CognitoService, ctx)
 	})
 
 	serverGroup.PUT("/update", func(c *gin.Context) {
-		handler := PatchServerHandler{}
-		handler.HandleRequest(c, kubeService, cognitoService, ctx)
+		h := PatchServerHandler{}
+		h.HandleRequest(c, wrapper.KubeService, wrapper.CognitoService, ctx)
 	})
 
 	serverGroup.PUT("/scale", func(c *gin.Context) {
-		handler := ScaleServerHandler{}
-		handler.HandleRequest(c, kubeService, cognitoService, ctx)
+		h := ScaleServerHandler{}
+		h.HandleRequest(c, wrapper.KubeService, wrapper.CognitoService, ctx)
 	})
 
 	return r, wsManager
