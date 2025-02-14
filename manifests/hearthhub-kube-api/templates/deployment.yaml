@@ -28,6 +28,8 @@ spec:
             - secretRef:
                 name: cognito-secrets
             - secretRef:
+               name: discord-secrets
+            - secretRef:
                 name: aws-creds
             - secretRef:
                 name: rabbitmq-secrets

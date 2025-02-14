@@ -73,19 +73,11 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 		})
 	})
 
+	// The following 2 routes are the only routes that do not require Authorization in the form of a discord id
+	// and OAuth refresh token to access.
 	apiGroup.POST("/discord/oauth", func(c *gin.Context) {
 		h := handler.DiscordRequestHandler{}
 		h.HandleRequest(c, wrapper.DiscordService)
-	})
-
-	apiGroup.GET("/file", func(c *gin.Context) {
-		h := handler.FileHandler{}
-		h.HandleRequest(c, wrapper.S3Service, wrapper.CognitoService)
-	})
-
-	apiGroup.POST("/file/upload", func(c *gin.Context) {
-		h := handler.UploadFileHandler{}
-		h.HandleRequest(c, wrapper.S3Service, wrapper.CognitoService)
 	})
 
 	cognitoGroup.POST("/create-user", func(c *gin.Context) {
@@ -93,17 +85,27 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 		h.HandleRequest(c, ctx, wrapper.CognitoService)
 	})
 
-	cognitoGroup.POST("/auth", func(c *gin.Context) {
+	apiGroup.GET("/file", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
+		h := handler.FileHandler{}
+		h.HandleRequest(c, wrapper.S3Service)
+	})
+
+	apiGroup.POST("/file/upload", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
+		h := handler.UploadFileHandler{}
+		h.HandleRequest(c, wrapper.S3Service)
+	})
+
+	cognitoGroup.POST("/auth", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
 		h := cognito.AuthHandler{}
 		h.HandleRequest(c, ctx, wrapper.CognitoService)
 	})
 
-	cognitoGroup.POST("/refresh-session", func(c *gin.Context) {
+	cognitoGroup.POST("/refresh-session", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
 		h := cognito.RefreshSessionHandler{}
 		h.HandleRequest(c, ctx, wrapper.CognitoService)
 	})
 
-	cognitoGroup.GET("/get-user", func(c *gin.Context) {
+	cognitoGroup.GET("/get-user", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
 		h := cognito.GetUserHandler{}
 		h.HandleRequest(c, ctx, wrapper.CognitoService)
 	})

@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/cbartram/hearthhub-mod-api/server/service"
@@ -17,45 +16,17 @@ type FileHandler struct{}
 
 // HandleRequest Handles the request for listing files under a given prefix. Since this route is deployed
 // to a lambda function and backed by the Cognito Authorizer only authorized users can invoke this.
-func (f *FileHandler) HandleRequest(c *gin.Context, s3Client *service.S3Service, cognitoService service.CognitoService) {
-	discordId := c.Query("discordId")
-	refreshToken := c.Query("refreshToken")
+func (f *FileHandler) HandleRequest(c *gin.Context, s3Client *service.S3Service) {
 	prefix := c.Query("prefix")
 
-	if discordId == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "discordId query parameter is required",
-		})
+	tmp, exists := c.Get("user")
+	if !exists {
+		log.Errorf("user not found in context")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "user not found in context"})
 		return
 	}
 
-	if refreshToken == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "refreshToken query parameter is required",
-		})
-		return
-	}
-
-	// Anyone can list mods, only users can list their own backups and configuration
-	// Therefore, we need to verify that the given discord id belongs to the refresh token that was given
-	// in the Authorization header
-	log.Infof("authenticating user with discord id: %s", discordId)
-	user, err := cognitoService.AuthUser(context.Background(), &refreshToken, &discordId)
-	if err != nil {
-		log.Errorf("user unauthorized, err: %v", err)
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "user unauthorized",
-		})
-		return
-	}
-
-	if user.DiscordID != discordId {
-		log.Errorf("authenticated user id: %s does not match given discord id: %s", user.DiscordID, discordId)
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "unauthorized: authenticated user id does not match given discord id",
-		})
-		return
-	}
+	user := tmp.(*service.CognitoUser)
 
 	// valid prefixes are stored in file_upload_handler.go and essentially are just:
 	// config, backups, mods to direct the s3 operation at where to list or put user files
@@ -73,7 +44,7 @@ func (f *FileHandler) HandleRequest(c *gin.Context, s3Client *service.S3Service,
 		sanitizedPrefix = prefix[0 : len(prefix)-1]
 	}
 
-	path := fmt.Sprintf("%s/%s/", sanitizedPrefix, discordId)
+	path := fmt.Sprintf("%s/%s/", sanitizedPrefix, user.DiscordID)
 	log.Infof("prefix is sanitized and valid: %s, listing objects for path: %s", sanitizedPrefix, path)
 
 	objs, err := s3Client.ListObjects(path)
@@ -87,7 +58,7 @@ func (f *FileHandler) HandleRequest(c *gin.Context, s3Client *service.S3Service,
 
 	// Also perform a list objects on the default mods available  and concat the lists
 	if prefix == "mods" {
-		log.Infof("prefix is: mods, fetching default mods as well as custom mods for user: %s", discordId)
+		log.Infof("prefix is: mods, fetching default mods as well as custom mods for user: %s", user.DiscordID)
 		defaultObjs, err := s3Client.ListObjects("mods/general/")
 		if err != nil {
 			log.Errorf("failed to list default mods: %v", err)
@@ -101,7 +72,7 @@ func (f *FileHandler) HandleRequest(c *gin.Context, s3Client *service.S3Service,
 
 	if prefix == "backups" {
 		log.Infof("prefix is: backups fetching auto backups as well as uploaded backups")
-		autoBackups, err := s3Client.ListObjects(fmt.Sprintf("valheim-backups-auto/%s/", discordId))
+		autoBackups, err := s3Client.ListObjects(fmt.Sprintf("valheim-backups-auto/%s/", user.DiscordID))
 		if err != nil {
 			log.Errorf("failed to list auto backups: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{

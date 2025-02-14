@@ -30,7 +30,16 @@ var ValidPrefixes = map[string]bool{
 type UploadFileHandler struct{}
 
 // HandleRequest handles file uploads to S3
-func (u *UploadFileHandler) HandleRequest(c *gin.Context, s3Client *service.S3Service, cognitoService service.CognitoService) {
+func (u *UploadFileHandler) HandleRequest(c *gin.Context, s3Client *service.S3Service) {
+	tmp, exists := c.Get("user")
+	if !exists {
+		log.Errorf("user not found in context")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "user not found in context"})
+		return
+	}
+
+	user := tmp.(*service.CognitoUser)
+
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -40,23 +49,7 @@ func (u *UploadFileHandler) HandleRequest(c *gin.Context, s3Client *service.S3Se
 	}
 	defer file.Close()
 
-	discordId := c.Query("discordId")
-	refreshToken := c.Query("refreshToken")
 	prefix := c.Query("query")
-
-	if discordId == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "discordId query parameter is required",
-		})
-		return
-	}
-
-	if refreshToken == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "refreshToken query parameter is required",
-		})
-		return
-	}
 
 	// This is equivalent to multiplying 10 by 2^20 (2 to the power of 20)
 	// Since 2^20 = 1,048,576 (approximately 1 million), this gives us 10 megabytes in bytes
@@ -102,26 +95,7 @@ func (u *UploadFileHandler) HandleRequest(c *gin.Context, s3Client *service.S3Se
 		sanitizedPrefix = prefix[0 : len(prefix)-1]
 	}
 
-	// Validate user's given refresh token matches their provided discord id
-	log.Infof("authenticating user with discord id: %s", discordId)
-	user, err := cognitoService.AuthUser(context.Background(), &refreshToken, &discordId)
-	if err != nil {
-		log.Errorf("user unauthorized, err: %v", err)
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "user unauthorized",
-		})
-		return
-	}
-
-	if user.DiscordID != discordId {
-		log.Errorf("authenticated user id: %s does not match given discord id: %s", user.DiscordID, discordId)
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "unauthorized: authenticated user id does not match given discord id",
-		})
-		return
-	}
-
-	path := fmt.Sprintf("%s/%s/%s", sanitizedPrefix, discordId, header.Filename)
+	path := fmt.Sprintf("%s/%s/%s", sanitizedPrefix, user.DiscordID, header.Filename)
 
 	_, err = s3Client.UploadObject(context.Background(), path)
 	if err != nil {

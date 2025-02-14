@@ -40,6 +40,8 @@ type CognitoCredentials struct {
 	IdToken         string `json:"id_token,omitempty"`
 }
 
+// CognitoUser Defines the properties that make up a HearthHub user including, id, name, installed mods, backups
+// etc... This object is returned from create user and authorize user endpoints.
 type CognitoUser struct {
 	CognitoID        string             `json:"cognitoId,omitempty"`
 	DiscordUsername  string             `json:"discordUsername,omitempty"`
@@ -58,21 +60,6 @@ type CognitoCreateUserRequest struct {
 	DiscordUsername string `json:"discord_username"`
 	DiscordEmail    string `json:"discord_email"`
 	AvatarId        string `json:"avatar_id"`
-}
-
-type CognitoUserStatusRequest struct {
-	AccountEnabled bool   `json:"accountEnabled"`
-	DiscordID      string `json:"discordId"`
-}
-
-type CognitoAuthRequest struct {
-	RefreshToken string `json:"refreshToken"`
-	DiscordID    string `json:"discordId"`
-}
-
-// SessionData represents locally stored session information
-type SessionData struct {
-	RefreshToken string `json:"refresh_token"`
 }
 
 // MakeCognitoService creates a new instance of CognitoAuthManager
