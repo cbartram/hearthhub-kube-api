@@ -20,7 +20,7 @@ image:
   # Versions for images the API is responsible for deploying
   # i.e. sidecar container, valheim server, and mod/file manager
   valheimImageName: "cbartram/hearthhub"
-  valheimImageVersion: "0.0.9"
+  valheimImageVersion: "0.0.10"
 
   # sidecar / backup manager
   backupManagerImageName: "cbartram/hearthhub-sidecar"
@@ -34,17 +34,9 @@ imagePullSecrets: []
 serviceAccountName: hearthhub-api-sa
 
 service:
-  type: NodePort
-  port: 8080
+  type: ClusterIP
+  port: 80
   targetPort: 8080
-  nodePort: 30000
-
-ingress:
-  enabled: true
-  className: nginx
-  serviceName: hearthhub-kube-api
-  port: 8080
-  host: hearthhub-api.ai
 
 resources:
    limits:

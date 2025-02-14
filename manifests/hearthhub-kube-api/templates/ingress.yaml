@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hearthhub-ingress
+  namespace: {{.Values.namespace}}
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - hearthhub.duckdns.org
+      secretName: hearthhub-tls
+  rules:
+    - host: hearthhub.duckdns.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{.Values.name }}
+                port:
+                  number: 80
