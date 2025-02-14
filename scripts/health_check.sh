@@ -3,7 +3,7 @@
 # NOTE IMPORTANT: Any time this file changes a new version of the valheim server needs to be built and published.
 # since this file is included in the base image.
 #
-if grep -q "with join code" /valheim/BepInEx/config/server-logs.txt; then
+if grep -q -E "with join code|Game server connected" /valheim/BepInEx/config/server-logs.txt; then
     echo "Server started!"
     exit 0
 else
