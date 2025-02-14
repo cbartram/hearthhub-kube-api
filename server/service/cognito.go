@@ -334,7 +334,7 @@ func (m *CognitoServiceImpl) AuthUser(ctx context.Context, refreshToken, userId 
 	})
 
 	if err != nil {
-		log.Errorf("error auth: user %s could not be authenticated: %s", *userId, err.Error())
+		log.Errorf("error auth: user %s could not be authenticated: %v", *userId, err)
 		return nil, err
 	}
 

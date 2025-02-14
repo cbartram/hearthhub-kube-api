@@ -43,7 +43,6 @@ func (c *Crypto) MakeCognitoSecretHash(userId, clientId, clientSecret string) st
 	return base64.StdEncoding.EncodeToString(digest)
 }
 
-// NewSecurePassword creates a new SecurePassword instance
 func MakeCrypto() *Crypto {
 	return &Crypto{}
 }

@@ -241,8 +241,24 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 							Command: []string{"sh", "-c"},
 							Args:    []string{fmt.Sprintf("/app/main -mode backup -token %s", user.Credentials.RefreshToken)},
 
+							// This container immediately tries to hit the kube api for pod labels and pod metrics. This startup probe
+							// ensures no timeouts occur while the pod data is propagating through etcd and the control plane API.
+							StartupProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									Exec: &corev1.ExecAction{
+										Command: []string{"/bin/sh", "-c",
+											"curl -s --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt -H \"Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\" https://kubernetes.default.svc/api/v1/namespaces/hearthhub/pods/$HOSTNAME",
+										},
+									},
+								},
+								InitialDelaySeconds: 10,
+								PeriodSeconds:       2,
+								SuccessThreshold:    1,
+								FailureThreshold:    10,
+							},
+
 							// Although these actions don't pertain to the actual valheim-server container they do pertain to the same pod so the information
-							// delivered to users will still be quite accurate.
+							// delivered to users will still be quite accurate (if not slightly inflated).
 							Lifecycle: &corev1.Lifecycle{
 								PostStart: &corev1.LifecycleHandler{
 									Exec: &corev1.ExecAction{

@@ -85,6 +85,7 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 		h.HandleRequest(c, ctx, wrapper.CognitoService)
 	})
 
+	//  Authorized routes below
 	apiGroup.GET("/file", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
 		h := handler.FileHandler{}
 		h.HandleRequest(c, wrapper.S3Service)
