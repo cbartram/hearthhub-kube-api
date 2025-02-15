@@ -55,7 +55,7 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 		go wsManager.Run()
 	}
 
-	r.GET("/ws", func(c *gin.Context) {
+	r.GET("/api/v1/ws", func(c *gin.Context) {
 		logrus.Infof("receive new websocket connection")
 		// When a user connects they get their own QueueBind and start sending events to the
 		// channels listened to in Run() and listening for messages on their queue.
