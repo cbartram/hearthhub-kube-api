@@ -1,4 +1,5 @@
 name: hearthhub-kube-api
+frontendServiceName: hearthhub-frontend-service
 namespace: hearthhub
 replicaCount: 1
 
@@ -30,7 +31,6 @@ image:
   fileManagerImageName: "cbartram/hearthhub-plugin-manager"
   fileManagerImageVersion: "0.0.26"
 
-imagePullSecrets: []
 serviceAccountName: hearthhub-api-sa
 
 service:
