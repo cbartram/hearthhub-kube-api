@@ -39,6 +39,7 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 	gin.DefaultWriter = logger.Writer()
 	gin.DefaultErrorWriter = logger.Writer()
 	gin.SetMode(gin.ReleaseMode)
+	r.MaxMultipartMemory = 32 << 20 // 32 MB
 
 	r.Use(CORSMiddleware(), LogrusMiddleware(logger))
 	apiGroup := r.Group("/api/v1")
