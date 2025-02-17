@@ -92,7 +92,7 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 		h.HandleRequest(c, wrapper.S3Service)
 	})
 
-	apiGroup.POST("/file/upload", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
+	apiGroup.POST("/file/generate-signed-url", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
 		h := handler.UploadFileHandler{}
 		h.HandleRequest(c, wrapper.S3Service)
 	})

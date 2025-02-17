@@ -1,34 +1,31 @@
 package handler
 
 import (
-	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/cbartram/hearthhub-mod-api/server/service"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+	"io"
 	"net/http"
 	"path/filepath"
+	"time"
 )
 
 var ValidExtensions = map[string]bool{
-	"fwl": true,
-	"db":  true,
-	"zip": true,
-	"cfg": true,
-}
-
-var ValidPrefixes = map[string]bool{
-	"backups":  true,
-	"configs":  true,
-	"mods":     true,
-	"backups/": true,
-	"configs/": true,
-	"mods/":    true,
+	".fwl": true,
+	".db":  true,
+	".zip": true,
+	".cfg": true,
 }
 
 type UploadFileHandler struct{}
+type FileMetadata struct {
+	Name string `json:"name"`
+	Size int    `json:"size"`
+}
 
-// HandleRequest handles file uploads to S3
+// HandleRequest Generates a signed url which can be used to upload a file directly to S3.
 func (u *UploadFileHandler) HandleRequest(c *gin.Context, s3Client *service.S3Service) {
 	tmp, exists := c.Get("user")
 	if !exists {
@@ -39,81 +36,62 @@ func (u *UploadFileHandler) HandleRequest(c *gin.Context, s3Client *service.S3Se
 
 	user := tmp.(*service.CognitoUser)
 
-	log.Infof("processing files")
-
-	seedFile, seedHeader, err := c.Request.FormFile("seed_file")
-
+	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No seed file provided"})
-		return
-	}
-	log.Infof("seed header: %s", seedHeader.Filename)
-	defer seedFile.Close()
-
-	worldFile, worldHeader, err := c.Request.FormFile("world_file")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No world file provided"})
-		return
-	}
-	defer worldFile.Close()
-	log.Infof("world header: %s", worldHeader.Filename)
-	log.Infof("got files!")
-
-	// This is equivalent to multiplying 10 by 2^20 (2 to the power of 20)
-	// Since 2^20 = 1,048,576 (approximately 1 million), this gives us 10 megabytes in bytes
-	if seedHeader.Size > 30<<20 || worldHeader.Size > 30<<20 {
-		log.Errorf("file size of db or fwl too large")
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "one of the files sizes is too large. Maximum size is 30MB",
-		})
+		log.Errorf("could not read body from request: %s", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("could not read body from request: %v", err)})
 		return
 	}
 
-	// Validate file extension
-	worldExt := filepath.Ext(worldHeader.Filename)
-	seedExt := filepath.Ext(seedHeader.Filename)
-	if worldExt == "" || seedExt == "" {
-		log.Errorf("no extension provided: world: %s, seed: %s", worldHeader.Filename, seedHeader.Filename)
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "file name must end with a valid extension: *.fwl, *.db",
-		})
+	var reqBody map[string][]FileMetadata
+	if err := json.Unmarshal(bodyRaw, &reqBody); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid request body: %v", err)})
 		return
 	}
 
-	worldExt = worldExt[1:]
-	seedExt = seedExt[1:]
-	_, ok := ValidExtensions[worldExt]
-	_, okSeeds := ValidExtensions[seedExt]
-	if !ok || !okSeeds {
-		log.Errorf("invalid extension: world: %s, seed: %s", worldExt, seedExt)
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": fmt.Sprintf("invalid extension: world: %s, seed: %s", worldExt, seedExt),
-		})
-		return
-	}
+	var urls = make(map[string]string)
+	for _, file := range reqBody["files"] {
+		// This is equivalent to multiplying 10 by 2^20 (2 to the power of 20)
+		// Since 2^20 = 1,048,576 (approximately 1 million), this gives us 10 megabytes in bytes
+		if file.Size > 30<<20 {
+			log.Errorf("file size of db or fwl too large")
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": fmt.Sprintf("%s file size is too large. Maximum size is 30MB", file.Name),
+			})
+			return
+		}
 
-	worldPath := fmt.Sprintf("valheim-backups-auto/%s/%s", user.DiscordID, worldHeader.Filename)
-	seedPath := fmt.Sprintf("valheim-backups-auto/%s/%s", user.DiscordID, seedHeader.Filename)
+		ext := filepath.Ext(file.Name)
+		if ext == "" {
+			log.Errorf("no extension provide for file: %s", file.Name)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": fmt.Sprintf("no extension provided for file: %s", file.Name),
+			})
+			return
+		}
 
-	// TODO Handling if 1 of these fails?
-	_, err = s3Client.UploadObject(context.Background(), worldPath)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("failed to upload world file: %v", err),
-		})
-		return
-	}
+		_, ok := ValidExtensions[ext]
+		if !ok {
+			log.Errorf("invalid extension provided for file: %s", file.Name)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": fmt.Sprintf("file name must end with a valid extension: *.fwl, *.db, file: %s", file.Name),
+			})
+			return
+		}
 
-	_, err = s3Client.UploadObject(context.Background(), seedPath)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("failed to upload seed file: %v", err),
-		})
-		return
+		prefix := fmt.Sprintf("valheim-backups-auto/%s/%s", user.DiscordID, file.Name)
+		url, err := s3Client.GeneratePutSignedUrl(prefix, 45*time.Second)
+		if err != nil {
+			log.Errorf("failed to generated presigned url: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("failed to generate presigned url for file: %s, err: %v", file.Name, err),
+			})
+			return
+		}
+		urls[file.Name] = url
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "file upload ok",
-		"files":   []string{worldPath, seedPath},
+		"urls": urls,
 	})
 }

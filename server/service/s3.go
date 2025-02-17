@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	log "github.com/sirupsen/logrus"
 	"os"
+	"time"
 )
 
 type S3Service struct {
@@ -32,6 +33,23 @@ func MakeS3Service(region string) (*S3Service, error) {
 
 	client := s3.NewFromConfig(cfg)
 	return &S3Service{client: client, bucket: os.Getenv("BUCKET_NAME")}, nil
+}
+
+// GeneratePutSignedUrl Generates a signed url for uploading an object to S3
+func (s *S3Service) GeneratePutSignedUrl(prefix string, expiration time.Duration) (string, error) {
+	presignClient := s3.NewPresignClient(s.client)
+	request, err := presignClient.PresignPutObject(context.TODO(),
+		&s3.PutObjectInput{
+			Bucket: &s.bucket,
+			Key:    &prefix,
+		},
+		s3.WithPresignExpires(expiration),
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate presigned URL: %v", err)
+	}
+
+	return request.URL, nil
 }
 
 // ListObjects lists all objects in a bucket with given prefix
