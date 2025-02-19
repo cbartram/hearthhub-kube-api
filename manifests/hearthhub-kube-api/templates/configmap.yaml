@@ -24,7 +24,6 @@ data:
   # Backup manager sidecar
   MAX_BACKUPS: "3"
   BACKUP_FREQUENCY_MIN: "10"
-  CLEANUP_FREQUENCY_MIN: "60"
 
   # Resources for valheim server
   CPU_REQUEST: "2"
