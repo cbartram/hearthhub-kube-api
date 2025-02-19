@@ -257,6 +257,17 @@ func CreateDedicatedServerDeployment(config *Config, kubeService service.Kuberne
 								FailureThreshold:    10,
 							},
 
+							Resources: corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("256m"),
+									corev1.ResourceMemory: resource.MustParse("512Mi"),
+								},
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("256m"),
+									corev1.ResourceMemory: resource.MustParse("512Mi"),
+								},
+							},
+
 							// Although these actions don't pertain to the actual valheim-server container they do pertain to the same pod so the information
 							// delivered to users will still be quite accurate (if not slightly inflated).
 							Lifecycle: &corev1.Lifecycle{
