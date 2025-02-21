@@ -16,7 +16,7 @@ image:
   pullPolicy: IfNotPresent
 
   # Tag for the API itself
-  tag: "0.0.71"
+  tag: "0.0.72"
 
   # Versions for images the API is responsible for deploying
   # i.e. sidecar container, valheim server, and mod/file manager
@@ -29,7 +29,7 @@ image:
 
   # file manager / plugin manager
   fileManagerImageName: "cbartram/hearthhub-plugin-manager"
-  fileManagerImageVersion: "0.0.26"
+  fileManagerImageVersion: "0.0.27"
 
 serviceAccountName: hearthhub-api-sa
 

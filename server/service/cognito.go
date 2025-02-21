@@ -51,6 +51,7 @@ type CognitoUser struct {
 	DiscordID        string             `json:"discordId,omitempty"`
 	InstalledMods    map[string]bool    `json:"installedMods"`
 	InstalledBackups map[string]bool    `json:"installedBackups"`
+	InstalledConfig  map[string]bool    `json:"installedConfig"`
 	AccountEnabled   bool               `json:"accountEnabled,omitempty"`
 	Credentials      CognitoCredentials `json:"credentials,omitempty"`
 }
@@ -109,7 +110,7 @@ func (m *CognitoServiceImpl) GetUser(ctx context.Context, discordId *string) (*C
 		return nil, errors.New("could not get user with username: " + *discordId)
 	}
 
-	var email, discordID, discordUsername, cognitoID, avatarID, installedModsStr, installedBackupsStr string
+	var email, discordID, discordUsername, cognitoID, avatarID, installedModsStr, installedBackupsStr, installedConfigStr string
 	for _, attr := range user.UserAttributes {
 		switch aws.ToString(attr.Name) {
 		case "email":
@@ -129,13 +130,17 @@ func (m *CognitoServiceImpl) GetUser(ctx context.Context, discordId *string) (*C
 			installedModsStr = aws.ToString(attr.Value)
 		case "custom:installed_backups":
 			installedBackupsStr = aws.ToString(attr.Value)
+		case "custom:installed_config":
+			installedConfigStr = aws.ToString(attr.Value)
 		}
 	}
 
 	var installedMods map[string]bool
 	var installedBackups map[string]bool
+	var installedConfig map[string]bool
 	err = json.Unmarshal([]byte(installedModsStr), &installedMods)
 	err = json.Unmarshal([]byte(installedBackupsStr), &installedBackups)
+	err = json.Unmarshal([]byte(installedConfigStr), &installedConfig)
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("failed to unmarshall installed file from str: %s", installedModsStr))
 	}
@@ -150,6 +155,7 @@ func (m *CognitoServiceImpl) GetUser(ctx context.Context, discordId *string) (*C
 		AccountEnabled:   user.Enabled,
 		InstalledMods:    installedMods,
 		InstalledBackups: installedBackups,
+		InstalledConfig:  installedConfig,
 	}, nil
 }
 
@@ -221,6 +227,10 @@ func (m *CognitoServiceImpl) CreateCognitoUser(ctx context.Context, createUserPa
 		},
 		{
 			Name:  aws.String("custom:installed_backups"),
+			Value: aws.String("{}"),
+		},
+		{
+			Name:  aws.String("custom:installed_config"),
 			Value: aws.String("{}"),
 		},
 	}
@@ -348,7 +358,7 @@ func (m *CognitoServiceImpl) AuthUser(ctx context.Context, refreshToken, userId 
 		return nil, err
 	}
 
-	var email, discordID, discordUsername, cognitoID, avatarID, installedModsStr, installedBackupsStr string
+	var email, discordID, discordUsername, cognitoID, avatarID, installedModsStr, installedBackupsStr, installedConfigStr string
 	for _, attr := range user.UserAttributes {
 		switch aws.ToString(attr.Name) {
 		case "email":
@@ -365,13 +375,17 @@ func (m *CognitoServiceImpl) AuthUser(ctx context.Context, refreshToken, userId 
 			installedModsStr = aws.ToString(attr.Value)
 		case "custom:installed_backups":
 			installedBackupsStr = aws.ToString(attr.Value)
+		case "custom:installed_config":
+			installedConfigStr = aws.ToString(attr.Value)
 		}
 	}
 
 	var installedMods map[string]bool
 	var installedBackups map[string]bool
+	var installedConfig map[string]bool
 	err = json.Unmarshal([]byte(installedModsStr), &installedMods)
 	err = json.Unmarshal([]byte(installedBackupsStr), &installedBackups)
+	err = json.Unmarshal([]byte(installedConfigStr), &installedConfig)
 	if err != nil {
 		log.Errorf("failed to unmarshall installed files from str: %s", installedModsStr)
 		return nil, err
@@ -388,6 +402,7 @@ func (m *CognitoServiceImpl) AuthUser(ctx context.Context, refreshToken, userId 
 		AvatarId:         avatarID,
 		InstalledMods:    installedMods,
 		InstalledBackups: installedBackups,
+		InstalledConfig:  installedConfig,
 		Credentials: CognitoCredentials{
 			AccessToken:     *auth.AuthenticationResult.AccessToken,
 			RefreshToken:    *refreshToken,

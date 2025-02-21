@@ -52,6 +52,7 @@ func (h *CreateUserRequestHandler) HandleRequest(c *gin.Context, ctx context.Con
 			AccountEnabled:   true,
 			InstalledMods:    map[string]bool{}, // A user has no mods installed when first created so this is safe
 			InstalledBackups: map[string]bool{},
+			InstalledConfig:  map[string]bool{},
 			Credentials: service.CognitoCredentials{
 				RefreshToken:    *creds.RefreshToken,
 				AccessToken:     *creds.AccessToken,
@@ -80,6 +81,7 @@ func (h *CreateUserRequestHandler) HandleRequest(c *gin.Context, ctx context.Con
 			AccountEnabled:   true,
 			InstalledMods:    user.InstalledMods,
 			InstalledBackups: user.InstalledBackups,
+			InstalledConfig:  user.InstalledConfig,
 			Credentials:      *creds,
 		})
 	}
