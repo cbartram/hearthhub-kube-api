@@ -14,6 +14,7 @@ type FileHandler struct{}
 type Response struct {
 	Mods    []service.SimpleS3Object `json:"mods"`
 	Backups []service.SimpleS3Object `json:"backups"`
+	Configs []service.SimpleS3Object `json:"configs"`
 }
 
 // HandleRequest Handles the request for listing files under a given prefix. Since this route is deployed
@@ -43,9 +44,10 @@ func ListAllObjects(s3Client *service.S3Service, discordId string) (*Response, e
 	var wg sync.WaitGroup
 	modsChan := make(chan []service.SimpleS3Object, 2)
 	backupsChan := make(chan []service.SimpleS3Object, 1)
-	errorChan := make(chan error, 3)
+	configsChan := make(chan []service.SimpleS3Object, 1)
+	errorChan := make(chan error, 4)
 
-	wg.Add(3)
+	wg.Add(4)
 	go func() {
 		defer wg.Done()
 		objects, err := s3Client.ListObjects("mods/general/")
@@ -68,6 +70,16 @@ func ListAllObjects(s3Client *service.S3Service, discordId string) (*Response, e
 
 	go func() {
 		defer wg.Done()
+		objects, err := s3Client.ListObjects(fmt.Sprintf("config/%s/", discordId))
+		if err != nil {
+			errorChan <- err
+			return
+		}
+		configsChan <- objects
+	}()
+
+	go func() {
+		defer wg.Done()
 		objects, err := s3Client.ListObjects(fmt.Sprintf("valheim-backups-auto/%s/", discordId))
 		if err != nil {
 			errorChan <- err
@@ -81,6 +93,7 @@ func ListAllObjects(s3Client *service.S3Service, discordId string) (*Response, e
 		wg.Wait()
 		close(modsChan)
 		close(backupsChan)
+		close(configsChan)
 		close(errorChan)
 	}()
 
@@ -91,10 +104,15 @@ func ListAllObjects(s3Client *service.S3Service, discordId string) (*Response, e
 	response := &Response{
 		Mods:    make([]service.SimpleS3Object, 0),
 		Backups: make([]service.SimpleS3Object, 0),
+		Configs: make([]service.SimpleS3Object, 0),
 	}
 
 	for objects := range modsChan {
 		response.Mods = append(response.Mods, objects...)
+	}
+
+	for objects := range configsChan {
+		response.Configs = append(response.Configs, objects...)
 	}
 
 	if objects := <-backupsChan; objects != nil {
