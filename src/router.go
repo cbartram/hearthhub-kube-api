@@ -71,6 +71,11 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 		h.HandleRequest(c)
 	})
 
+	apiGroup.GET("/stripe/create-billing-session", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
+		h := stripe.BillingSessionHandler{}
+		h.HandleRequest(c)
+	})
+
 	// The health route returns the latest versions for the valheim src and sidecar so users
 	// can be alerted when to delete and re-create their servers.
 	apiGroup.GET("/health", func(c *gin.Context) {
