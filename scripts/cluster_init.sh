@@ -19,4 +19,6 @@ kubectl create secret generic cognito-secrets -n hearthhub --from-literal=USER_P
 kubectl create secret generic rabbitmq-secrets -n rabbitmq --from-literal=RABBITMQ_DEFAULT_USER="$RABBITMQ_DEFAULT_USER" --from-literal=RABBITMQ_DEFAULT_PASS="$RABBITMQ_DEFAULT_PASS"
 kubectl create secret generic rabbitmq-secrets -n hearthhub --from-literal=RABBITMQ_DEFAULT_USER="$RABBITMQ_DEFAULT_USER" --from-literal=RABBITMQ_DEFAULT_PASS="$RABBITMQ_DEFAULT_PASS"
 
+kubectl create secret generic stripe-secrets -n hearthhub --from-literal=STRIPE_SECRET_KEY="$STRIPE_SECRET_KEY"
+
 echo "Successfully scaffolded Kubernetes cluster for HearthHub!"

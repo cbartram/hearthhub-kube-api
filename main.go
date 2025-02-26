@@ -5,8 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/cbartram/hearthhub-mod-api/server"
-	"github.com/cbartram/hearthhub-mod-api/server/service"
+	"github.com/cbartram/hearthhub-mod-api/src"
+	"github.com/cbartram/hearthhub-mod-api/src/service"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/rest"
@@ -55,7 +55,7 @@ func main() {
 		logrus.Fatalf("failed to create S3 service: %v", err)
 	}
 
-	router, wsManager := server.NewRouter(context.Background(), &server.ServiceWrapper{
+	router, wsManager := src.NewRouter(context.Background(), &src.ServiceWrapper{
 		DiscordService: discordService,
 		S3Service:      s3Service,
 		CognitoService: cognitoService,
