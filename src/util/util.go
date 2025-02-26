@@ -15,7 +15,7 @@ func GetHostname() string {
 	host := os.Getenv("HOSTNAME")
 
 	if host == "" {
-		return "http://localhost:8080"
+		return "http://localhost:5173"
 	}
 
 	return "https://hearthhub.duckdns.org"
