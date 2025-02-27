@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 	"github.com/cbartram/hearthhub-mod-api/src/util"
 	log "github.com/sirupsen/logrus"
+	"github.com/stripe/stripe-go/v81"
 	"os"
 	"path/filepath"
 )
@@ -17,6 +18,7 @@ import (
 type CognitoService interface {
 	GetUserAttributes(ctx context.Context, accessToken *string) ([]types.AttributeType, error)
 	UpdateUserAttributes(ctx context.Context, accessToken *string, attributes []types.AttributeType) error
+	AdminUpdateUserAttributes(ctx context.Context, discordId string, attributes []types.AttributeType) error
 	GetUser(ctx context.Context, discordId *string) (*CognitoUser, error)
 	EnableUser(ctx context.Context, discordId string) bool
 	DisableUser(ctx context.Context, discordId string) bool
@@ -43,17 +45,20 @@ type CognitoCredentials struct {
 // CognitoUser Defines the properties that make up a HearthHub user including, id, name, installed mods, backups
 // etc... This object is returned from create user and authorize user endpoints.
 type CognitoUser struct {
-	CognitoID        string             `json:"cognitoId,omitempty"`
-	DiscordUsername  string             `json:"discordUsername,omitempty"`
-	Email            string             `json:"email,omitempty"`
-	AvatarId         string             `json:"avatarId"`
-	Enabled          bool               `json:"enabled"`
-	DiscordID        string             `json:"discordId,omitempty"`
-	InstalledMods    map[string]bool    `json:"installedMods"`
-	InstalledBackups map[string]bool    `json:"installedBackups"`
-	InstalledConfig  map[string]bool    `json:"installedConfig"`
-	AccountEnabled   bool               `json:"accountEnabled,omitempty"`
-	Credentials      CognitoCredentials `json:"credentials,omitempty"`
+	CognitoID          string                    `json:"cognitoId,omitempty"`
+	DiscordUsername    string                    `json:"discordUsername,omitempty"`
+	Email              string                    `json:"email,omitempty"`
+	AvatarId           string                    `json:"avatarId"`
+	Enabled            bool                      `json:"enabled"`
+	DiscordID          string                    `json:"discordId,omitempty"`
+	CustomerId         string                    `json:"customerId,omitempty"`
+	SubscriptionId     string                    `json:"subscriptionId"`
+	SubscriptionStatus stripe.SubscriptionStatus `json:"subscriptionStatus"`
+	InstalledMods      map[string]bool           `json:"installedMods"`
+	InstalledBackups   map[string]bool           `json:"installedBackups"`
+	InstalledConfig    map[string]bool           `json:"installedConfig"`
+	AccountEnabled     bool                      `json:"accountEnabled,omitempty"`
+	Credentials        CognitoCredentials        `json:"credentials,omitempty"`
 }
 
 type CognitoCreateUserRequest struct {
@@ -79,7 +84,7 @@ func (m *CognitoServiceImpl) GetUserAttributes(ctx context.Context, accessToken 
 
 	if err != nil {
 		log.Errorf("could not get user with access token: %s", err.Error())
-		return nil, errors.New("could not get user with access token")
+		return nil, err
 	}
 
 	return user.UserAttributes, nil
@@ -93,7 +98,22 @@ func (m *CognitoServiceImpl) UpdateUserAttributes(ctx context.Context, accessTok
 
 	if err != nil {
 		log.Errorf("could not update user attributes with access token: %s", err)
-		return errors.New("could not update user attributes with access token")
+		return err
+	}
+
+	return nil
+}
+
+func (m *CognitoServiceImpl) AdminUpdateUserAttributes(ctx context.Context, discordId string, attributes []types.AttributeType) error {
+	_, err := m.cognitoClient.AdminUpdateUserAttributes(ctx, &cognitoidentityprovider.AdminUpdateUserAttributesInput{
+		UserPoolId:     aws.String(m.userPoolID),
+		Username:       aws.String(discordId),
+		UserAttributes: attributes,
+	})
+
+	if err != nil {
+		log.Errorf("could not update user attributes with discord id: %s", err)
+		return err
 	}
 
 	return nil
@@ -110,52 +130,34 @@ func (m *CognitoServiceImpl) GetUser(ctx context.Context, discordId *string) (*C
 		return nil, errors.New("could not get user with username: " + *discordId)
 	}
 
-	var email, discordID, discordUsername, cognitoID, avatarID, installedModsStr, installedBackupsStr, installedConfigStr string
-	for _, attr := range user.UserAttributes {
-		switch aws.ToString(attr.Name) {
-		case "email":
-			email = aws.ToString(attr.Value)
-		case "sub":
-			cognitoID = aws.ToString(attr.Value)
-		case "custom:discord_id":
-			discordID = aws.ToString(attr.Value)
-		case "custom:discord_username":
-			discordUsername = aws.ToString(attr.Value)
-		case "custom:avatar_id":
-			avatarID = aws.ToString(attr.Value)
-
-		// installed mods will be a json string stored when the mod is actually persisted to the pvc
-		// by the hearthhub-file manager.
-		case "custom:installed_mods":
-			installedModsStr = aws.ToString(attr.Value)
-		case "custom:installed_backups":
-			installedBackupsStr = aws.ToString(attr.Value)
-		case "custom:installed_config":
-			installedConfigStr = aws.ToString(attr.Value)
-		}
-	}
+	attr := parseUserAttributes(user)
 
 	var installedMods map[string]bool
 	var installedBackups map[string]bool
 	var installedConfig map[string]bool
-	err = json.Unmarshal([]byte(installedModsStr), &installedMods)
-	err = json.Unmarshal([]byte(installedBackupsStr), &installedBackups)
-	err = json.Unmarshal([]byte(installedConfigStr), &installedConfig)
+	err = json.Unmarshal([]byte(attr["custom:installed_mods"]), &installedMods)
+	err = json.Unmarshal([]byte(attr["custom:installed_backups"]), &installedBackups)
+	err = json.Unmarshal([]byte(attr["custom:installed_config"]), &installedConfig)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("failed to unmarshall installed file from str: %s", installedModsStr))
+		log.Errorf("failed to unmarshall installed files from str: %v", err)
+		return nil, err
 	}
 
-	// Note: This method does not return credentials with the user
+	// Note: we still authenticate a disabled user the service side handles updating UI/auth flows
+	// to re-auth with discord.
 	return &CognitoUser{
-		DiscordUsername:  discordUsername,
-		DiscordID:        discordID,
-		Email:            email,
-		CognitoID:        cognitoID,
-		AvatarId:         avatarID,
-		AccountEnabled:   user.Enabled,
-		InstalledMods:    installedMods,
-		InstalledBackups: installedBackups,
-		InstalledConfig:  installedConfig,
+		DiscordUsername:    attr["custom:discord_username"],
+		DiscordID:          attr["custom:discord_id"],
+		Email:              attr["email"],
+		CognitoID:          attr["sub"],
+		AvatarId:           attr["custom:avatar_id"],
+		CustomerId:         attr["custom:stripe_customer_id"],
+		SubscriptionId:     attr["custom:stripe_sub_id"],
+		SubscriptionStatus: util.MapSubscriptionStatus(attr["custom:stripe_sub_status"]),
+		AccountEnabled:     user.Enabled,
+		InstalledMods:      installedMods,
+		InstalledBackups:   installedBackups,
+		InstalledConfig:    installedConfig,
 	}, nil
 }
 
@@ -358,51 +360,34 @@ func (m *CognitoServiceImpl) AuthUser(ctx context.Context, refreshToken, userId 
 		return nil, err
 	}
 
-	var email, discordID, discordUsername, cognitoID, avatarID, installedModsStr, installedBackupsStr, installedConfigStr string
-	for _, attr := range user.UserAttributes {
-		switch aws.ToString(attr.Name) {
-		case "email":
-			email = aws.ToString(attr.Value)
-		case "sub":
-			cognitoID = aws.ToString(attr.Value)
-		case "custom:discord_id":
-			discordID = aws.ToString(attr.Value)
-		case "custom:discord_username":
-			discordUsername = aws.ToString(attr.Value)
-		case "custom:avatar_id":
-			avatarID = aws.ToString(attr.Value)
-		case "custom:installed_mods":
-			installedModsStr = aws.ToString(attr.Value)
-		case "custom:installed_backups":
-			installedBackupsStr = aws.ToString(attr.Value)
-		case "custom:installed_config":
-			installedConfigStr = aws.ToString(attr.Value)
-		}
-	}
+	attr := parseUserAttributes(user)
 
 	var installedMods map[string]bool
 	var installedBackups map[string]bool
 	var installedConfig map[string]bool
-	err = json.Unmarshal([]byte(installedModsStr), &installedMods)
-	err = json.Unmarshal([]byte(installedBackupsStr), &installedBackups)
-	err = json.Unmarshal([]byte(installedConfigStr), &installedConfig)
+	err = json.Unmarshal([]byte(attr["custom:installed_mods"]), &installedMods)
+	err = json.Unmarshal([]byte(attr["custom:installed_backups"]), &installedBackups)
+	err = json.Unmarshal([]byte(attr["custom:installed_config"]), &installedConfig)
 	if err != nil {
-		log.Errorf("failed to unmarshall installed files from str: %s", installedModsStr)
+		log.Errorf("failed to unmarshall installed files from str: %v", err)
 		return nil, err
 	}
 
 	// Note: we still authenticate a disabled user the service side handles updating UI/auth flows
 	// to re-auth with discord.
 	return &CognitoUser{
-		DiscordUsername:  discordUsername,
-		DiscordID:        discordID,
-		Email:            email,
-		CognitoID:        cognitoID,
-		AccountEnabled:   user.Enabled,
-		AvatarId:         avatarID,
-		InstalledMods:    installedMods,
-		InstalledBackups: installedBackups,
-		InstalledConfig:  installedConfig,
+		DiscordUsername:    attr["custom:discord_username"],
+		DiscordID:          attr["custom:discord_id"],
+		Email:              attr["email"],
+		CognitoID:          attr["sub"],
+		AccountEnabled:     user.Enabled,
+		AvatarId:           attr["custom:avatar_id"],
+		CustomerId:         attr["custom:stripe_customer_id"],
+		SubscriptionId:     attr["custom:stripe_sub_id"],
+		SubscriptionStatus: util.MapSubscriptionStatus(attr["custom:stripe_sub_status"]),
+		InstalledMods:      installedMods,
+		InstalledBackups:   installedBackups,
+		InstalledConfig:    installedConfig,
 		Credentials: CognitoCredentials{
 			AccessToken:     *auth.AuthenticationResult.AccessToken,
 			RefreshToken:    *refreshToken,
@@ -410,4 +395,35 @@ func (m *CognitoServiceImpl) AuthUser(ctx context.Context, refreshToken, userId 
 			IdToken:         *auth.AuthenticationResult.IdToken,
 		},
 	}, nil
+}
+
+func parseUserAttributes(user *cognitoidentityprovider.AdminGetUserOutput) map[string]string {
+	var (
+		email, discordID, discordUsername, cognitoID, avatarID    string
+		installedModsStr, installedBackupsStr, installedConfigStr string
+		customerId, subscriptionId, subscriptionStatus            string
+	)
+
+	attributeMap := map[string]string{
+		"email":                     email,
+		"sub":                       cognitoID,
+		"custom:discord_id":         discordID,
+		"custom:discord_username":   discordUsername,
+		"custom:avatar_id":          avatarID,
+		"custom:installed_mods":     installedModsStr,
+		"custom:installed_backups":  installedBackupsStr,
+		"custom:installed_config":   installedConfigStr,
+		"custom:stripe_customer_id": customerId,
+		"custom:stripe_sub_id":      subscriptionId,
+		"custom:stripe_sub_status":  subscriptionStatus,
+	}
+
+	for _, attr := range user.UserAttributes {
+		if target, ok := attributeMap[aws.ToString(attr.Name)]; ok {
+			target = aws.ToString(attr.Value)
+			attributeMap[aws.ToString(attr.Name)] = target
+		}
+	}
+
+	return attributeMap
 }

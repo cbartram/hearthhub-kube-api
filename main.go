@@ -44,6 +44,7 @@ func main() {
 		log.Printf("local kube config loaded successfully")
 	}
 
+	stripeService := service.MakeStripeService()
 	kubeService := service.MakeKubernetesService(kubeConfig)
 	cognitoService := service.MakeCognitoService(cfg)
 	discordService, err := service.MakeDiscordService()
@@ -60,6 +61,7 @@ func main() {
 		S3Service:      s3Service,
 		CognitoService: cognitoService,
 		KubeService:    kubeService,
+		StripeService:  stripeService,
 	})
 
 	defer func() {

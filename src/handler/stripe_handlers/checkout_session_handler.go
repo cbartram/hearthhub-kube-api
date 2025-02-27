@@ -1,7 +1,8 @@
-package stripe
+package stripe_handlers
 
 import (
 	"fmt"
+	"github.com/cbartram/hearthhub-mod-api/src/service"
 	"github.com/cbartram/hearthhub-mod-api/src/util"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -25,6 +26,15 @@ func (h *CheckoutSessionHandler) HandleRequest(c *gin.Context) {
 		})
 		return
 	}
+
+	tmp, exists := c.Get("user")
+	if !exists {
+		log.Errorf("user not found in context")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "user not found in context"})
+		return
+	}
+
+	user := tmp.(*service.CognitoUser)
 
 	i := price.List(&stripe.PriceListParams{
 		LookupKeys: stripe.StringSlice([]string{
@@ -51,16 +61,20 @@ func (h *CheckoutSessionHandler) HandleRequest(c *gin.Context) {
 			Quantity: stripe.Int64(1),
 		},
 		},
-		Mode:         stripe.String(string(stripe.CheckoutSessionModeSubscription)),
-		SuccessURL:   stripe.String(host + "/pricing?success=true&session_id={CHECKOUT_SESSION_ID}"),
-		CancelURL:    stripe.String(host + "/pricing?canceled=true"),
-		AutomaticTax: &stripe.CheckoutSessionAutomaticTaxParams{Enabled: stripe.Bool(true)},
+		ClientReferenceID: stripe.String(user.DiscordID),
+		Mode:              stripe.String(string(stripe.CheckoutSessionModeSubscription)),
+		SuccessURL:        stripe.String(host + "/pricing?success=true&session_id={CHECKOUT_SESSION_ID}"),
+		CancelURL:         stripe.String(host + "/pricing?canceled=true"),
+		AutomaticTax:      &stripe.CheckoutSessionAutomaticTaxParams{Enabled: stripe.Bool(true)},
+		Metadata: map[string]string{
+			"discordId": user.DiscordID,
+		},
 	}
 
 	s, err := session.New(params)
 
 	if err != nil {
-		log.Errorf("failed to create new stripe session: %v", err)
+		log.Errorf("failed to create new stripe_handlers session: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("failed to create new checkout session: %v", err),
 		})

@@ -1,4 +1,4 @@
-package stripe
+package stripe_handlers
 
 import (
 	"fmt"
@@ -28,9 +28,9 @@ func (h *BillingSessionHandler) HandleRequest(c *gin.Context) {
 	s, err := session.Get(sessionId, nil)
 
 	if err != nil {
-		log.Errorf("failed to find stripe session: %v", err)
+		log.Errorf("failed to find stripe_handlers session: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": fmt.Sprintf("failed to find stripe checkout session for billing with id: %s", sessionId),
+			"error": fmt.Sprintf("failed to find stripe_handlers checkout session for billing with id: %s", sessionId),
 		})
 		return
 	}

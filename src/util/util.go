@@ -3,6 +3,7 @@ package util
 import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
+	"github.com/stripe/stripe-go/v81"
 	corev1 "k8s.io/api/core/v1"
 	"math/rand"
 	"os"
@@ -111,5 +112,26 @@ func MakeVolumeMounts() []corev1.VolumeMount {
 			Name:      "irongate",
 			MountPath: "/irongate",
 		},
+	}
+}
+
+func MapSubscriptionStatus(status string) stripe.SubscriptionStatus {
+	switch status {
+	case "active":
+		return stripe.SubscriptionStatusActive
+	case "canceled":
+		return stripe.SubscriptionStatusCanceled
+	case "incomplete":
+		return stripe.SubscriptionStatusIncomplete
+	case "incomplete_expired":
+		return stripe.SubscriptionStatusIncompleteExpired
+	case "past_due":
+		return stripe.SubscriptionStatusPastDue
+	case "trialing":
+		return stripe.SubscriptionStatusTrialing
+	case "unpaid":
+		return stripe.SubscriptionStatusUnpaid
+	default:
+		return "unknown"
 	}
 }

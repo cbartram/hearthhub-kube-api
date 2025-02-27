@@ -6,7 +6,7 @@ import (
 	"github.com/cbartram/hearthhub-mod-api/src/handler/cognito"
 	"github.com/cbartram/hearthhub-mod-api/src/handler/file"
 	"github.com/cbartram/hearthhub-mod-api/src/handler/server"
-	"github.com/cbartram/hearthhub-mod-api/src/handler/stripe"
+	"github.com/cbartram/hearthhub-mod-api/src/handler/stripe_handlers"
 	"github.com/cbartram/hearthhub-mod-api/src/service"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
@@ -18,6 +18,7 @@ import (
 type ServiceWrapper struct {
 	DiscordService *service.DiscordService
 	S3Service      *service.S3Service
+	StripeService  *service.StripeService
 	CognitoService service.CognitoService
 	KubeService    service.KubernetesService
 }
@@ -67,13 +68,18 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 	})
 
 	apiGroup.GET("/stripe/create-checkout-session", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
-		h := stripe.CheckoutSessionHandler{}
+		h := stripe_handlers.CheckoutSessionHandler{}
 		h.HandleRequest(c)
 	})
 
 	apiGroup.GET("/stripe/create-billing-session", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
-		h := stripe.BillingSessionHandler{}
+		h := stripe_handlers.BillingSessionHandler{}
 		h.HandleRequest(c)
+	})
+
+	apiGroup.POST("/stripe/webhook", func(c *gin.Context) {
+		h := stripe_handlers.WebhookHandler{}
+		h.HandleRequest(c, wrapper.CognitoService)
 	})
 
 	// The health route returns the latest versions for the valheim src and sidecar so users
@@ -112,7 +118,7 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 
 	cognitoGroup.POST("/auth", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
 		h := cognito.AuthHandler{}
-		h.HandleRequest(c, ctx, wrapper.CognitoService)
+		h.HandleRequest(c, ctx, wrapper.CognitoService, wrapper.StripeService)
 	})
 
 	cognitoGroup.POST("/refresh-session", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
