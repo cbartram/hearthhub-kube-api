@@ -83,6 +83,7 @@ func main() {
 		logrus.Infof("Closing websocket connection and channel")
 		wsManager.Connection.Close()
 		wsManager.Channel.Close()
+		rabbitMqService.Close()
 	}()
 
 	log.Printf("Server Listening on port %s", *port)

@@ -15,29 +15,37 @@ import (
 type BillingSessionHandler struct{}
 
 func (h *BillingSessionHandler) HandleRequest(c *gin.Context) {
+	var customerId string
+
 	stripe.Key = os.Getenv("STRIPE_SECRET_KEY")
 	sessionId, ok := c.GetQuery("sessionId")
+	custId, okCust := c.GetQuery("customerId")
 
-	if !ok {
+	if !ok && !okCust {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "you must provide a \"sessionId\" in the query parameters.",
+			"error": "you must provide a \"sessionId\" or \"customerId\" in the query parameters.",
 		})
 		return
 	}
 
-	s, err := session.Get(sessionId, nil)
+	if okCust {
+		customerId = custId
+	} else {
+		s, err := session.Get(sessionId, nil)
+		if err != nil {
+			log.Errorf("failed to find stripe_handlers session: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": fmt.Sprintf("failed to find stripe_handlers checkout session for billing with id: %s", sessionId),
+			})
+			return
+		}
 
-	if err != nil {
-		log.Errorf("failed to find stripe_handlers session: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": fmt.Sprintf("failed to find stripe_handlers checkout session for billing with id: %s", sessionId),
-		})
-		return
+		customerId = s.Customer.ID
 	}
 
 	params := &stripe.BillingPortalSessionParams{
-		Customer:  stripe.String(s.Customer.ID),
-		ReturnURL: stripe.String(util.GetHostname() + "/pricing?success=true&session_id=" + sessionId),
+		Customer:  stripe.String(customerId),
+		ReturnURL: stripe.String(util.GetHostname() + "/pricing?success=true&session_id=" + sessionId + "&customerId=" + customerId),
 	}
 	ps, err := portalsession.New(params)
 	if err != nil {

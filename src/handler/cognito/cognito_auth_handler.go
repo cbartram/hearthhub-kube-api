@@ -9,13 +9,20 @@ import (
 )
 
 type AuthHandler struct{}
+type AuthorizationLevel string
+
+var (
+	NoAuth               AuthorizationLevel = "NO_AUTH"
+	CognitoAuth          AuthorizationLevel = "COGNITO_AUTH"
+	CognitoAndStripeAuth AuthorizationLevel = "COGNITO_STRIPE_AUTH"
+)
 
 // This mapping is VERY important. It specifies the level of authorization required to access each resource (frontend page).
-// A value of false means the user must be authenticated with cognito but does not need an active stripe sub to access the page.
-// A true value means the user must have both cognito auth and an active stripe subscription to access the page.
-var authorizationMap = map[string]bool{
-	"pricing":   false,
-	"dashboard": true,
+var authorizationMap = map[string]AuthorizationLevel{
+	"pricing":   CognitoAuth,
+	"dashboard": CognitoAndStripeAuth,
+	"landing":   NoAuth,
+	"login":     NoAuth,
 }
 
 // HandleRequest Authenticates that a refresh token is valid for a given user id. This returns the entire
@@ -54,12 +61,13 @@ func (h *AuthHandler) HandleRequest(c *gin.Context, ctx context.Context, cognito
 	}
 
 	// The user does not need stripe sub to access the resource
-	if !authorizationValue {
-		log.Infof("user auth ok -- no stripe sub required for resource: %s", resource)
+	if authorizationValue == CognitoAuth || authorizationValue == NoAuth {
+		log.Infof("user auth ok, no stripe sub required for resource: %s", resource)
 		c.JSON(http.StatusOK, cognitoUser)
 		return
 	}
 
+	// Else we know it requires both cognito and stripe so proceed to verify stripe
 	ok, err = stripeService.VerifyActiveSubscription(cognitoUser.CustomerId, cognitoUser.SubscriptionId)
 	if err != nil {
 		log.Errorf("unable to verify stripe subscription status: %v", err)
