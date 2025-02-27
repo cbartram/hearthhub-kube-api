@@ -52,7 +52,6 @@ func TestHandleDeleteServerRoute(t *testing.T) {
 				DiscordUsername: "123",
 				Email:           "foobar",
 				DiscordID:       "123abc",
-				AccountEnabled:  true,
 				Credentials: service.CognitoCredentials{
 					AccessToken:  "abc",
 					RefreshToken: "def",

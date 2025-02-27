@@ -85,6 +85,16 @@ func (h *AuthHandler) HandleRequest(c *gin.Context, ctx context.Context, cognito
 		return
 	}
 
+	limits, err := stripeService.GetSubscriptionLimits(cognitoUser.SubscriptionId)
+	if err != nil {
+		log.Errorf("failed to get sub limits for sub id: %s, error: %v", cognitoUser.SubscriptionId, err)
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "failed to parse subscription limits",
+		})
+		return
+	}
+
+	cognitoUser.SubscriptionLimits = *limits
 	log.Infof("user auth ok -- stripe sub verified for resource: %s", resource)
 	c.JSON(http.StatusOK, cognitoUser)
 }

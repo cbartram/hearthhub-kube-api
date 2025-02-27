@@ -19,9 +19,6 @@ type CognitoService interface {
 	GetUserAttributes(ctx context.Context, accessToken *string) ([]types.AttributeType, error)
 	UpdateUserAttributes(ctx context.Context, accessToken *string, attributes []types.AttributeType) error
 	AdminUpdateUserAttributes(ctx context.Context, discordId string, attributes []types.AttributeType) error
-	GetUser(ctx context.Context, discordId *string) (*CognitoUser, error)
-	EnableUser(ctx context.Context, discordId string) bool
-	DisableUser(ctx context.Context, discordId string) bool
 	CreateCognitoUser(ctx context.Context, createUserPayload *CognitoCreateUserRequest) (*types.AuthenticationResultType, error)
 	RefreshSession(ctx context.Context, discordID string) (*CognitoCredentials, error)
 	AuthUser(ctx context.Context, refreshToken, userId *string) (*CognitoUser, error)
@@ -55,10 +52,10 @@ type CognitoUser struct {
 	CustomerId         string                    `json:"customerId,omitempty"`
 	SubscriptionId     string                    `json:"subscriptionId"`
 	SubscriptionStatus stripe.SubscriptionStatus `json:"subscriptionStatus"`
+	SubscriptionLimits SubscriptionLimits        `json:"subscriptionLimits,omitempty"`
 	InstalledMods      map[string]bool           `json:"installedMods"`
 	InstalledBackups   map[string]bool           `json:"installedBackups"`
 	InstalledConfig    map[string]bool           `json:"installedConfig"`
-	AccountEnabled     bool                      `json:"accountEnabled,omitempty"`
 	Credentials        CognitoCredentials        `json:"credentials,omitempty"`
 }
 
@@ -138,72 +135,6 @@ func (m *CognitoServiceImpl) AdminUpdateUserAttributes(ctx context.Context, disc
 	}
 
 	return nil
-}
-
-func (m *CognitoServiceImpl) GetUser(ctx context.Context, discordId *string) (*CognitoUser, error) {
-	user, err := m.cognitoClient.AdminGetUser(ctx, &cognitoidentityprovider.AdminGetUserInput{
-		UserPoolId: aws.String(m.userPoolID),
-		Username:   discordId,
-	})
-
-	if err != nil {
-		log.Errorf("no user exists with username: %s, err: %v", *discordId, err)
-		return nil, errors.New("could not get user with username: " + *discordId)
-	}
-
-	attr := parseUserAttributes(user)
-
-	var installedMods map[string]bool
-	var installedBackups map[string]bool
-	var installedConfig map[string]bool
-	err = json.Unmarshal([]byte(attr["custom:installed_mods"]), &installedMods)
-	err = json.Unmarshal([]byte(attr["custom:installed_backups"]), &installedBackups)
-	err = json.Unmarshal([]byte(attr["custom:installed_config"]), &installedConfig)
-	if err != nil {
-		log.Errorf("failed to unmarshall installed files from str: %v", err)
-		return nil, err
-	}
-
-	// Note: we still authenticate a disabled user the service side handles updating UI/auth flows
-	// to re-auth with discord.
-	return &CognitoUser{
-		DiscordUsername:    attr["custom:discord_username"],
-		DiscordID:          attr["custom:discord_id"],
-		Email:              attr["email"],
-		CognitoID:          attr["sub"],
-		AvatarId:           attr["custom:avatar_id"],
-		CustomerId:         attr["custom:stripe_customer_id"],
-		SubscriptionId:     attr["custom:stripe_sub_id"],
-		SubscriptionStatus: util.MapSubscriptionStatus(attr["custom:stripe_sub_status"]),
-		AccountEnabled:     user.Enabled,
-		InstalledMods:      installedMods,
-		InstalledBackups:   installedBackups,
-		InstalledConfig:    installedConfig,
-	}, nil
-}
-
-func (m *CognitoServiceImpl) EnableUser(ctx context.Context, discordId string) bool {
-	_, err := m.cognitoClient.AdminEnableUser(ctx, &cognitoidentityprovider.AdminEnableUserInput{
-		UserPoolId: aws.String(m.userPoolID),
-		Username:   aws.String(discordId),
-	})
-	if err != nil {
-		log.Errorf("failed to enable user: %s", err)
-		return false
-	}
-	return true
-}
-
-func (m *CognitoServiceImpl) DisableUser(ctx context.Context, discordId string) bool {
-	_, err := m.cognitoClient.AdminDisableUser(ctx, &cognitoidentityprovider.AdminDisableUserInput{
-		UserPoolId: aws.String(m.userPoolID),
-		Username:   aws.String(discordId),
-	})
-	if err != nil {
-		log.Errorf("failed to disable user: %s", err)
-		return false
-	}
-	return true
 }
 
 func (m *CognitoServiceImpl) CreateCognitoUser(ctx context.Context, createUserPayload *CognitoCreateUserRequest) (*types.AuthenticationResultType, error) {
@@ -394,14 +325,13 @@ func (m *CognitoServiceImpl) AuthUser(ctx context.Context, refreshToken, userId 
 		return nil, err
 	}
 
-	// Note: we still authenticate a disabled user the service side handles updating UI/auth flows
-	// to re-auth with discord.
+	// Note: Subscription limits are fetched at the API route handler layer because the data is stored in stripe and
+	// not all users are subscribed adding a stripe API call here would be wasteful and may cause issues for a non-existent stripe user.
 	return &CognitoUser{
 		DiscordUsername:    attr["custom:discord_username"],
 		DiscordID:          attr["custom:discord_id"],
 		Email:              attr["email"],
 		CognitoID:          attr["sub"],
-		AccountEnabled:     user.Enabled,
 		AvatarId:           attr["custom:avatar_id"],
 		CustomerId:         attr["custom:stripe_customer_id"],
 		SubscriptionId:     attr["custom:stripe_sub_id"],

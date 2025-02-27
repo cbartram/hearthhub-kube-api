@@ -32,7 +32,7 @@ func (h *CreateUserRequestHandler) HandleRequest(c *gin.Context, ctx context.Con
 	}
 
 	// We want to assert that the user does not exist before we create it.
-	user, _ := cognitoService.GetUser(ctx, &reqBody.DiscordID)
+	user, _ := cognitoService.FindUserByAttribute(context.Background(), "name", reqBody.DiscordID)
 	if user == nil {
 		creds, err := cognitoService.CreateCognitoUser(ctx, &reqBody)
 		if err != nil {
@@ -49,7 +49,6 @@ func (h *CreateUserRequestHandler) HandleRequest(c *gin.Context, ctx context.Con
 			Email:            reqBody.DiscordEmail,
 			DiscordID:        reqBody.DiscordID,
 			AvatarId:         reqBody.AvatarId,
-			AccountEnabled:   true,
 			InstalledMods:    map[string]bool{}, // A user has no mods installed when first created so this is safe
 			InstalledBackups: map[string]bool{},
 			InstalledConfig:  map[string]bool{},
@@ -62,8 +61,7 @@ func (h *CreateUserRequestHandler) HandleRequest(c *gin.Context, ctx context.Con
 		})
 	} else {
 		// User already exists.
-		log.Infof("user already exists, re-enabling and refreshing session")
-		cognitoService.EnableUser(ctx, reqBody.DiscordID)
+		log.Infof("user already exists, refreshing session")
 		creds, err := cognitoService.RefreshSession(ctx, reqBody.DiscordID)
 		if err != nil {
 			log.Errorf("error: failed to refresh existing user session: " + err.Error())
@@ -73,15 +71,25 @@ func (h *CreateUserRequestHandler) HandleRequest(c *gin.Context, ctx context.Con
 			return
 		}
 
+		var installedMods, installedBackups, installedConfig map[string]bool
+		for _, attr := range user.Attributes {
+			if *attr.Name == "custom:installed_mods" {
+				json.Unmarshal([]byte(*attr.Value), &installedMods)
+			} else if *attr.Name == "custom:installed_backups" {
+				json.Unmarshal([]byte(*attr.Value), &installedBackups)
+			} else if *attr.Name == "custom:installed_config" {
+				json.Unmarshal([]byte(*attr.Value), &installedConfig)
+			}
+		}
+
 		c.JSON(http.StatusOK, service.CognitoUser{
 			DiscordUsername:  reqBody.DiscordUsername,
 			Email:            reqBody.DiscordEmail,
 			DiscordID:        reqBody.DiscordID,
 			AvatarId:         reqBody.AvatarId,
-			AccountEnabled:   true,
-			InstalledMods:    user.InstalledMods,
-			InstalledBackups: user.InstalledBackups,
-			InstalledConfig:  user.InstalledConfig,
+			InstalledMods:    installedMods,
+			InstalledBackups: installedBackups,
+			InstalledConfig:  installedConfig,
 			Credentials:      *creds,
 		})
 	}

@@ -127,11 +127,6 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 		h.HandleRequest(c, ctx, wrapper.CognitoService)
 	})
 
-	cognitoGroup.GET("/get-user", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
-		h := cognito.GetUserHandler{}
-		h.HandleRequest(c, ctx, wrapper.CognitoService)
-	})
-
 	modGroup.POST("/install", func(c *gin.Context) {
 		h := file.InstallFileHandler{}
 		h.HandleRequest(c, wrapper.KubeService)

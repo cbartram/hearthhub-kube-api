@@ -9,16 +9,12 @@ import (
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"net/http"
-	"os"
-	"strconv"
 )
 
 type GetServerHandler struct{}
 
 type GetServerResponse struct {
-	Servers     []CreateServerResponse `json:"servers"`
-	CpuLimit    int                    `json:"cpu_limit"`
-	MemoryLimit int                    `json:"memory_limit"`
+	Servers []CreateServerResponse `json:"servers"`
 }
 
 func (g *GetServerHandler) HandleRequest(c *gin.Context, cognito service.CognitoService, ctx context.Context) {
@@ -40,13 +36,8 @@ func (g *GetServerHandler) HandleRequest(c *gin.Context, cognito service.Cognito
 		return
 	}
 
-	cpuLimit, _ := strconv.Atoi(os.Getenv("CPU_LIMIT"))
-	memLimit, _ := strconv.Atoi(os.Getenv("MEMORY_LIMIT"))
-
 	response := GetServerResponse{
-		Servers:     []CreateServerResponse{},
-		CpuLimit:    cpuLimit,
-		MemoryLimit: memLimit,
+		Servers: []CreateServerResponse{},
 	}
 
 	// If src is nil it's the first time the user is booting up.
