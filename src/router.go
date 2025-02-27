@@ -16,11 +16,12 @@ import (
 )
 
 type ServiceWrapper struct {
-	DiscordService *service.DiscordService
-	S3Service      *service.S3Service
-	StripeService  *service.StripeService
-	CognitoService service.CognitoService
-	KubeService    service.KubernetesService
+	DiscordService  *service.DiscordService
+	S3Service       *service.S3Service
+	StripeService   *service.StripeService
+	CognitoService  service.CognitoService
+	KubeService     service.KubernetesService
+	RabbitMQService *service.RabbitMqService
 }
 
 // NewRouter Create a new gin router and instantiates the routes and route handlers for the entire API.
@@ -47,7 +48,7 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 
 	r.Use(CORSMiddleware(), LogrusMiddleware(logger))
 	apiGroup := r.Group("/api/v1")
-	serverGroup := apiGroup.Group("/src", CORSMiddleware(), AuthMiddleware(wrapper.CognitoService))
+	serverGroup := apiGroup.Group("/server", CORSMiddleware(), AuthMiddleware(wrapper.CognitoService))
 	modGroup := apiGroup.Group("/file", CORSMiddleware(), AuthMiddleware(wrapper.CognitoService))
 	cognitoGroup := apiGroup.Group("/cognito", CORSMiddleware())
 
@@ -79,7 +80,7 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 
 	apiGroup.POST("/stripe/webhook", func(c *gin.Context) {
 		h := stripe_handlers.WebhookHandler{}
-		h.HandleRequest(c, wrapper.CognitoService)
+		h.HandleRequest(c, wrapper.RabbitMQService)
 	})
 
 	// The health route returns the latest versions for the valheim src and sidecar so users

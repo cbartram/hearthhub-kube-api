@@ -17,7 +17,83 @@ import (
 
 type WebhookHandler struct{}
 
-func (w *WebhookHandler) HandleRequest(c *gin.Context, cognito service.CognitoService) {
+func ConsumeMessageWithDelay(message service.Message, cognito service.CognitoService) {
+	switch message.Type {
+	case "checkout.session.completed":
+		var session stripe.CheckoutSession
+		err := json.Unmarshal(message.Body, &session)
+		if err != nil {
+			log.Errorf("error parsing webhook json: %v", err)
+			return
+		}
+		log.Infof("checkout session completed %s.", session.ID)
+
+		discordId := session.Metadata["discordId"]
+		err = cognito.AdminUpdateUserAttributes(context.Background(), discordId, []types.AttributeType{
+			{
+				Name:  stripe.String("custom:stripe_customer_id"),
+				Value: stripe.String(session.Customer.ID),
+			},
+			{
+				Name:  stripe.String("custom:stripe_sub_id"),
+				Value: stripe.String(session.Subscription.ID),
+			},
+			{
+				Name:  stripe.String("custom:stripe_sub_status"),
+				Value: stripe.String("unknown"), // Sub status is unknown at this point
+			},
+		})
+
+		if err != nil {
+			log.Errorf("failed to reconcile stripe_handlers data with cognito attributes: %v", err)
+			return
+		}
+	case "customer.subscription.updated", "customer.subscription.deleted", "customer.subscription.created", "customer.subscription.trial_will_end":
+		var subscription stripe.Subscription
+		err := json.Unmarshal(message.Body, &subscription)
+		if err != nil {
+			log.Errorf("error parsing webhook json: %v", err)
+			return
+		}
+
+		user, err := cognito.FindUserByAttribute(context.Background(), "custom:stripe_sub_id", subscription.ID)
+		if err != nil {
+			log.Errorf("failed to find user with subscription ID %s: %v", subscription.ID, err)
+			return
+		}
+
+		if user == nil {
+			log.Errorf("no user found with subscription ID: %s", subscription.ID)
+			return
+		}
+
+		if message.Type == "customer.subscription.updated" {
+			err = cognito.AdminUpdateUserAttributes(context.Background(), *user.Username, []types.AttributeType{
+				{
+					Name:  stripe.String("custom:stripe_sub_status"),
+					Value: stripe.String(string(subscription.Status)),
+				},
+			})
+			log.Infof("subscription updated for user %s, status: %s", *user.Username, subscription.Status)
+		} else if message.Type == "customer.subscription.deleted" {
+			err = cognito.AdminUpdateUserAttributes(context.Background(), *user.Username, []types.AttributeType{
+				{
+					Name:  stripe.String("custom:stripe_sub_status"),
+					Value: stripe.String("canceled"),
+				},
+			})
+
+			log.Infof("subscription canceled for user %s", *user.Username)
+		}
+
+		if err != nil {
+			log.Errorf("failed to update user attributes: %v", err)
+			return
+		}
+	}
+}
+
+func (w *WebhookHandler) HandleRequest(c *gin.Context, rabbitMQService *service.RabbitMqService) {
 	payload, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
@@ -34,85 +110,24 @@ func (w *WebhookHandler) HandleRequest(c *gin.Context, cognito service.CognitoSe
 		return
 	}
 
-	switch event.Type {
-	case "checkout.session.completed":
-		var session stripe.CheckoutSession
-		err := json.Unmarshal(event.Data.Raw, &session)
-		if err != nil {
-			log.Errorf("error parsing webhook json: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("error parsing webhook json: %v", err)})
-			return
-		}
+	eventType := string(event.Type)
 
-		discordId := session.Metadata["discordId"]
-		log.Infof("stripe sub status: %s", string(session.Subscription.Status))
-		err = cognito.AdminUpdateUserAttributes(context.Background(), discordId, []types.AttributeType{
-			{
-				Name:  stripe.String("custom:stripe_customer_id"),
-				Value: stripe.String(session.Customer.ID),
-			},
-			{
-				Name:  stripe.String("custom:stripe_sub_id"),
-				Value: stripe.String(session.Subscription.ID),
-			},
-			{
-				Name:  stripe.String("custom:stripe_sub_status"),
-				Value: stripe.String(string(session.Subscription.Status)),
-			},
+	switch eventType {
+	case "checkout.session.completed",
+		"customer.subscription.updated",
+		"customer.subscription.deleted",
+		"customer.subscription.created",
+		"customer.subscription.trial_will_end":
+		log.Infof("enqueueing message with type: %s", eventType)
+		err = rabbitMQService.PublishMessage(&service.Message{
+			Type: eventType,
+			Body: event.Data.Raw,
 		})
 
 		if err != nil {
-			log.Errorf("failed to reconcile stripe_handlers data with cognito attributes: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to reconcile stripe_handlers data with cognito attributes: %v", err)})
-			return
+			log.Errorf("failed to enqueue message with type: %s, error: %v", eventType, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to enqueue message"})
 		}
-	case "customer.subscription.deleted":
-		var subscription stripe.Subscription
-		err := json.Unmarshal(event.Data.Raw, &subscription)
-		if err != nil {
-			log.Errorf("error parsing webhook json: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("error parsing webhook json: %v", err)})
-			return
-		}
-		log.Infof("Subscription deleted for %s.", subscription.ID)
-	case "customer.subscription.updated":
-		var subscription stripe.Subscription
-		err := json.Unmarshal(event.Data.Raw, &subscription)
-		if err != nil {
-			log.Errorf("error parsing webhook json: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("error parsing webhook json: %v", err)})
-			return
-		}
-		log.Infof("Subscription updated for %s.", subscription.ID)
-	case "customer.subscription.created":
-		var subscription stripe.Subscription
-		err := json.Unmarshal(event.Data.Raw, &subscription)
-		if err != nil {
-			log.Errorf("error parsing webhook json: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("error parsing webhook json: %v", err)})
-			return
-		}
-		log.Infof("Subscription created for %s", subscription.ID)
-	case "customer.subscription.trial_will_end":
-		var subscription stripe.Subscription
-		err := json.Unmarshal(event.Data.Raw, &subscription)
-		if err != nil {
-			log.Errorf("error parsing webhook json: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("error parsing webhook json: %v", err)})
-			return
-		}
-		log.Infof("Subscription trial will end for %s.", subscription.ID)
-	case "entitlements.active_entitlement_summary.updated":
-		var subscription stripe.Subscription
-		err := json.Unmarshal(event.Data.Raw, &subscription)
-		if err != nil {
-			log.Errorf("error parsing webhook json: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("error parsing webhook json: %v", err)})
-			return
-		}
-		log.Infof("Active entitlement summary updated for %s.", subscription.ID)
-	default:
-		log.Infof("unknown event type: %s", event.Type)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "OK"})

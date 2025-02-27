@@ -54,13 +54,13 @@ func NewWebSocketManager() (*WebSocketManager, error) {
 	}
 
 	err = ch.ExchangeDeclare(
-		"valheim-src-status", // exchange name
-		"direct",             // exchange type
-		true,                 // durable
-		false,                // auto-deleted
-		false,                // internal
-		false,                // no-wait
-		nil,                  // arguments
+		"valheim-server-status", // exchange name
+		"direct",                // exchange type
+		true,                    // durable
+		false,                   // auto-deleted
+		false,                   // internal
+		false,                   // no-wait
+		nil,                     // arguments
 	)
 	if err != nil {
 		log.Fatalf("failed to declare exchange: %v", err)
@@ -138,11 +138,11 @@ func (w *WebSocketManager) HandleWebSocket(c *gin.Context) {
 		return
 	}
 
-	// Bind the queue to the exchange with src-specific routing key
+	// Bind the queue to the exchange with server-specific routing key
 	err = w.Channel.QueueBind(
 		q.Name,
 		discordId,
-		"valheim-src-status",
+		"valheim-server-status",
 		false,
 		nil,
 	)

@@ -3,6 +3,9 @@ frontendServiceName: hearthhub-frontend-service
 namespace: hearthhub
 replicaCount: 1
 
+stripe:
+  mode: test
+
 s3:
   bucketName: "hearthhub-backups"
 

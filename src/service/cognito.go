@@ -25,6 +25,7 @@ type CognitoService interface {
 	CreateCognitoUser(ctx context.Context, createUserPayload *CognitoCreateUserRequest) (*types.AuthenticationResultType, error)
 	RefreshSession(ctx context.Context, discordID string) (*CognitoCredentials, error)
 	AuthUser(ctx context.Context, refreshToken, userId *string) (*CognitoUser, error)
+	FindUserByAttribute(ctx context.Context, attributeName, attributeValue string) (*types.UserType, error)
 }
 
 type CognitoServiceImpl struct {
@@ -88,6 +89,26 @@ func (m *CognitoServiceImpl) GetUserAttributes(ctx context.Context, accessToken 
 	}
 
 	return user.UserAttributes, nil
+}
+
+func (m *CognitoServiceImpl) FindUserByAttribute(ctx context.Context, attributeName, attributeValue string) (*types.UserType, error) {
+	resp, err := m.cognitoClient.ListUsers(ctx, &cognitoidentityprovider.ListUsersInput{
+		UserPoolId: aws.String(m.userPoolID),
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("error listing users: %v", err)
+	}
+
+	for _, user := range resp.Users {
+		for _, attr := range user.Attributes {
+			if *attr.Name == attributeName && *attr.Value == attributeValue {
+				return &user, nil
+			}
+		}
+	}
+
+	return nil, nil
 }
 
 func (m *CognitoServiceImpl) UpdateUserAttributes(ctx context.Context, accessToken *string, attributes []types.AttributeType) error {
