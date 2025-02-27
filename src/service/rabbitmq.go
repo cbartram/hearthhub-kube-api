@@ -136,7 +136,6 @@ func (r *RabbitMqService) RegisterConsumer(consumer func(message Message, cognit
 		for msg := range msgs {
 			time.Sleep(delay)
 			var message Message
-			log.Infof("processing stripe webhook message: %s", msg.Type)
 			if err := json.Unmarshal(msg.Body, &message); err != nil {
 				log.Errorf("error unmarshaling stripe websocket message: %v", err)
 				continue

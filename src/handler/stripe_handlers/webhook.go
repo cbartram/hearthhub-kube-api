@@ -18,37 +18,10 @@ import (
 type WebhookHandler struct{}
 
 func ConsumeMessageWithDelay(message service.Message, cognito service.CognitoService) {
+	log.Infof("processing rabbitmq message type: %s", message.Type)
+
 	switch message.Type {
-	case "checkout.session.completed":
-		var session stripe.CheckoutSession
-		err := json.Unmarshal(message.Body, &session)
-		if err != nil {
-			log.Errorf("error parsing webhook json: %v", err)
-			return
-		}
-		log.Infof("checkout session completed %s.", session.ID)
-
-		discordId := session.Metadata["discordId"]
-		err = cognito.AdminUpdateUserAttributes(context.Background(), discordId, []types.AttributeType{
-			{
-				Name:  stripe.String("custom:stripe_customer_id"),
-				Value: stripe.String(session.Customer.ID),
-			},
-			{
-				Name:  stripe.String("custom:stripe_sub_id"),
-				Value: stripe.String(session.Subscription.ID),
-			},
-			{
-				Name:  stripe.String("custom:stripe_sub_status"),
-				Value: stripe.String("unknown"), // Sub status is unknown at this point
-			},
-		})
-
-		if err != nil {
-			log.Errorf("failed to reconcile stripe_handlers data with cognito attributes: %v", err)
-			return
-		}
-	case "customer.subscription.updated", "customer.subscription.deleted", "customer.subscription.created", "customer.subscription.trial_will_end":
+	case "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted", "customer.subscription.trial_will_end":
 		var subscription stripe.Subscription
 		err := json.Unmarshal(message.Body, &subscription)
 		if err != nil {
@@ -56,40 +29,39 @@ func ConsumeMessageWithDelay(message service.Message, cognito service.CognitoSer
 			return
 		}
 
-		user, err := cognito.FindUserByAttribute(context.Background(), "custom:stripe_sub_id", subscription.ID)
+		user, err := cognito.FindUserByAttribute(context.Background(), "custom:stripe_customer_id", subscription.Customer.ID)
 		if err != nil {
-			log.Errorf("failed to find user with subscription ID %s: %v", subscription.ID, err)
+			log.Errorf("failed to find user with customer id: %s, error: %v", subscription.ID, err)
 			return
 		}
 
 		if user == nil {
-			log.Errorf("no user found with subscription ID: %s", subscription.ID)
+			log.Errorf("no cognito user found with customer id: %s", subscription.ID)
 			return
 		}
 
-		if message.Type == "customer.subscription.updated" {
-			err = cognito.AdminUpdateUserAttributes(context.Background(), *user.Username, []types.AttributeType{
-				{
-					Name:  stripe.String("custom:stripe_sub_status"),
-					Value: stripe.String(string(subscription.Status)),
-				},
-			})
-			log.Infof("subscription updated for user %s, status: %s", *user.Username, subscription.Status)
-		} else if message.Type == "customer.subscription.deleted" {
-			err = cognito.AdminUpdateUserAttributes(context.Background(), *user.Username, []types.AttributeType{
-				{
-					Name:  stripe.String("custom:stripe_sub_status"),
-					Value: stripe.String("canceled"),
-				},
-			})
-
-			log.Infof("subscription canceled for user %s", *user.Username)
+		var attribute types.AttributeType
+		if message.Type == "customer.subscription.created" {
+			attribute = types.AttributeType{
+				Name:  stripe.String("custom:stripe_sub_id"),
+				Value: stripe.String(subscription.ID),
+			}
+		} else {
+			// sub updates, pauses, and cancellations both affect the sub_status field and will update it to either:
+			// "active", "paused" or "canceled"
+			attribute = types.AttributeType{
+				Name:  stripe.String("custom:stripe_sub_status"),
+				Value: stripe.String(string(subscription.Status)),
+			}
 		}
+
+		err = cognito.AdminUpdateUserAttributes(context.Background(), *user.Username, []types.AttributeType{attribute})
 
 		if err != nil {
-			log.Errorf("failed to update user attributes: %v", err)
+			log.Errorf("failed to update cognito with stripe subscription id: %s, error: %v", subscription.ID, err)
 			return
 		}
+		log.Infof("subscription updated for user %s, id: %s, status: %s", *user.Username, subscription.ID, subscription.Status)
 	}
 }
 
@@ -112,11 +84,13 @@ func (w *WebhookHandler) HandleRequest(c *gin.Context, rabbitMQService *service.
 
 	eventType := string(event.Type)
 
+	// Note: these cases are actually ordered in the timeline that webhook events are received
 	switch eventType {
-	case "checkout.session.completed",
-		"customer.subscription.updated",
-		"customer.subscription.deleted",
+	case
 		"customer.subscription.created",
+		"customer.subscription.updated",
+		"customer.subscription.paused",
+		"customer.subscription.deleted",
 		"customer.subscription.trial_will_end":
 		log.Infof("enqueueing message with type: %s", eventType)
 		err = rabbitMQService.PublishMessage(&service.Message{

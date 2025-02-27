@@ -70,7 +70,7 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 
 	apiGroup.GET("/stripe/create-checkout-session", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
 		h := stripe_handlers.CheckoutSessionHandler{}
-		h.HandleRequest(c)
+		h.HandleRequest(c, wrapper.CognitoService)
 	})
 
 	apiGroup.GET("/stripe/create-billing-session", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
