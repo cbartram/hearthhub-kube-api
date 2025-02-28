@@ -150,7 +150,7 @@ func TestToStringArgs(t *testing.T) {
 			expected: "/valheim/valheim_server.x86_64 -name MyServer -port 2456 -world MyWorld -password MyPassword -instanceid 12345 -backups 3 -backupshort 7200 -backuplong 43200 -public 0 | tee /valheim/output.log",
 		},
 		{
-			name: "Enable crossplay and public src",
+			name: "Enable crossplay and public server",
 			config: &Config{
 				Name:                  "MyServer",
 				World:                 "MyWorld",

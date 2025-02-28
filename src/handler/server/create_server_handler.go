@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 )
 
 type CreateServerRequest struct {
@@ -410,6 +411,19 @@ func CreateDedicatedServerDeployment(config *cfg.Config, kubeService service.Kub
 				},
 			},
 		},
+	}
+
+	// If PVC already exists remove the finalizers and delete
+	if kubeService.DoesPvcExist(pvcName) {
+		log.Infof("pvc: %s already exists, removing finalizers and deleting before re-creation", pvcName)
+		err := kubeService.RemoveFinalizersAndDelete(pvcName)
+		if err != nil {
+			log.Errorf("failed to remove finalizers and pvc: %s, error: %v", pvcName, err)
+			return nil, err
+		}
+
+		// Sleeping gives a buffer for the pvc to be deleted before its attempt to be re-created.
+		time.Sleep(5 * time.Second)
 	}
 
 	kubeService.AddAction(&service.PVCAction{PVC: MakePvc(pvcName, deploymentName, user.DiscordID)})

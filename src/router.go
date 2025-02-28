@@ -114,7 +114,7 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 
 	apiGroup.POST("/file/generate-signed-url", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
 		h := file.UploadFileHandler{}
-		h.HandleRequest(c, wrapper.S3Service)
+		h.HandleRequest(c, wrapper.S3Service, wrapper.StripeService)
 	})
 
 	cognitoGroup.POST("/auth", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
@@ -129,7 +129,7 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 
 	modGroup.POST("/install", func(c *gin.Context) {
 		h := file.InstallFileHandler{}
-		h.HandleRequest(c, wrapper.KubeService)
+		h.HandleRequest(c, wrapper.KubeService, wrapper.S3Service)
 	})
 
 	serverGroup.GET("/", func(c *gin.Context) {

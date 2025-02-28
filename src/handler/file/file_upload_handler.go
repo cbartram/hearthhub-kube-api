@@ -27,7 +27,7 @@ type FileMetadata struct {
 }
 
 // HandleRequest Generates a signed url which can be used to upload a file directly to S3.
-func (u *UploadFileHandler) HandleRequest(c *gin.Context, s3Client *service.S3Service) {
+func (u *UploadFileHandler) HandleRequest(c *gin.Context, s3Client *service.S3Service, stripeService *service.StripeService) {
 	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
@@ -38,6 +38,21 @@ func (u *UploadFileHandler) HandleRequest(c *gin.Context, s3Client *service.S3Se
 	var reqBody map[string][]FileMetadata
 	if err := json.Unmarshal(bodyRaw, &reqBody); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid request body: %v", err)})
+		return
+	}
+
+	tmp, exists := c.Get("user")
+	if !exists {
+		log.Errorf("user not found in context")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "user not found in context"})
+		return
+	}
+
+	user := tmp.(*service.CognitoUser)
+	limits, err := stripeService.GetSubscriptionLimits(user.SubscriptionId)
+	if err != nil {
+		log.Errorf("failed to get user subscription limits: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get user subscription limits"})
 		return
 	}
 
@@ -66,6 +81,16 @@ func (u *UploadFileHandler) HandleRequest(c *gin.Context, s3Client *service.S3Se
 			log.Errorf("invalid extension provided for file: %s", file.Name)
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error": fmt.Sprintf("file name must end with a valid extension: *.fwl, *.db, file: %s", file.Name),
+			})
+			return
+		}
+
+		// Only Legend tier subscribers can upload existing worlds. This check ensures that before we generate
+		// an upload url for them, they are in fact legend tier subscribers.
+		if (ext == ".db" || ext == ".fwl") && !limits.ExistingWorldUpload {
+			log.Errorf("user plan prohibits existing world uploads: extension %s, limits: %v", ext, limits)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "user plan prohibits existing world uploads",
 			})
 			return
 		}

@@ -18,6 +18,7 @@ import (
 	"k8s.io/utils/ptr"
 	"net/http"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -27,6 +28,7 @@ type FilePayload struct {
 	Destination string  `json:"destination"`
 	IsArchive   bool    `json:"is_archive"`
 	Operation   string  `json:"operation"`
+	S3Delete    bool    `json:"s3Delete"`
 }
 
 // Validate Validates that the payload provide is not malformed or missing information.
@@ -70,7 +72,7 @@ func (f *FilePayload) Validate() error {
 
 type InstallFileHandler struct{}
 
-func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService service.KubernetesService) {
+func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService service.KubernetesService, s3Service *service.S3Service) {
 	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
@@ -95,13 +97,57 @@ func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService service.K
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found in context"})
 	}
 	user := tmp.(*service.CognitoUser)
+
+	if reqBody.S3Delete {
+		log.Infof("removing files with prefix: %s from S3", *reqBody.Prefix)
+		if strings.HasSuffix(*reqBody.Prefix, ".db") || strings.HasSuffix(*reqBody.Prefix, ".fwl") {
+			objects, err := s3Service.ListObjects(fmt.Sprintf("valheim-backups-auto/%s", user.DiscordID))
+			if err != nil {
+				log.Errorf("failed to list s3 objects for deletion: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to list s3 objects for deletion: %v", err)})
+				return
+			}
+
+			for _, obj := range objects {
+				filename := path.Base(obj.Key)
+				reqBodyFileName := path.Base(*reqBody.Prefix)
+
+				if strings.HasSuffix(reqBodyFileName, ".db") {
+					reqBodyFileName = strings.TrimSuffix(reqBodyFileName, ".db")
+				} else if strings.HasSuffix(reqBodyFileName, ".fwl") {
+					reqBodyFileName = strings.TrimSuffix(reqBodyFileName, ".fwl")
+				}
+
+				// Check if the file matches the exact base filename with .db or .fwl extension
+				if filename == fmt.Sprintf("%s.db", reqBodyFileName) || filename == fmt.Sprintf("%s.fwl", reqBodyFileName) {
+					log.Infof("deleting object: %s", obj.Key)
+					err := s3Service.DeleteObject(context.Background(), obj.Key)
+					if err != nil {
+						log.Errorf("failed to delete object %s: %v", obj.Key, err)
+						continue
+					}
+				} else if strings.HasPrefix(filename, fmt.Sprintf("%s_backup_auto-", reqBodyFileName)) && (strings.HasSuffix(filename, ".db") || strings.HasSuffix(filename, ".fwl")) {
+					log.Infof("deleting object: %s", obj.Key)
+					err := s3Service.DeleteObject(context.Background(), obj.Key)
+					if err != nil {
+						log.Errorf("failed to delete object %s: %v", obj.Key, err)
+						continue
+					}
+				}
+			}
+
+		} else {
+			log.Infof("s3 deletions are only available for .db or .fwl files")
+		}
+	}
+
 	name, err := CreateFileJob(kubeService.GetClient(), &reqBody, user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("could not create file management job: %v", err)})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("file job created: %s", *name)})
+	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("file %s job created: %s", reqBody.Operation, *name)})
 }
 
 // CreateFileJob Creates a new kubernetes job which attaches the valheim src PVC, downloads mods from S3,

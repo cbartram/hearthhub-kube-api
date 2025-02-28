@@ -82,6 +82,8 @@ type KubernetesService interface {
 	GetClient() kubernetes.Interface
 	GetClusterIp() (string, error)
 	Rollback() ([]string, error)
+	DoesPvcExist(name string) bool
+	RemoveFinalizersAndDelete(name string) error
 }
 
 type KubernetesServiceImpl struct {
@@ -100,6 +102,57 @@ func MakeKubernetesService(config *rest.Config) KubernetesService {
 		Client:          clientset,
 		ResourceActions: []ResourceAction{},
 	}
+}
+
+// DoesPvcExist Returns true if the pvc exists and false otherwise
+func (k *KubernetesServiceImpl) DoesPvcExist(name string) bool {
+	pvc, err := k.Client.CoreV1().PersistentVolumeClaims("hearthhub").Get(context.Background(), name, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false
+		}
+		// error but assume PVC doesn't exist in case of errors
+		return false
+	}
+	return pvc != nil
+}
+
+// RemoveFinalizersAndDelete Removes a PVC's finalizers setting them to null and deletes the PVC.
+func (k *KubernetesServiceImpl) RemoveFinalizersAndDelete(name string) error {
+	// Get the PVC first
+	pvc, err := k.Client.CoreV1().PersistentVolumeClaims("hearthhub").Get(context.Background(), name, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// PVC doesn't exist, nothing to do
+			return nil
+		}
+		return fmt.Errorf("failed to get PVC %s: %w", name, err)
+	}
+
+	if len(pvc.Finalizers) > 0 {
+		pvcCopy := pvc.DeepCopy()
+		pvcCopy.Finalizers = nil
+
+		_, err = k.Client.CoreV1().PersistentVolumeClaims("hearthhub").Update(
+			context.Background(),
+			pvcCopy,
+			metav1.UpdateOptions{},
+		)
+		if err != nil {
+			return fmt.Errorf("failed to remove finalizers from PVC %s: %w", name, err)
+		}
+	}
+
+	err = k.Client.CoreV1().PersistentVolumeClaims("hearthhub").Delete(
+		context.Background(),
+		name,
+		metav1.DeleteOptions{},
+	)
+	if err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to delete PVC %s: %w", name, err)
+	}
+
+	return nil
 }
 
 // GetClusterIp Returns the ipv4 WAN address for the cluster. This will be the address returned to users
