@@ -19,7 +19,7 @@ type PatchServerHandler struct{}
 
 // HandleRequest Much of this logic overlaps with the /create endpoint. It uses the same request body, validation logic, and method structure.
 // The primary difference is in how it patches the container run args for a deployment rather than creating a new one.
-func (p *PatchServerHandler) HandleRequest(c *gin.Context, kubeService service.KubernetesService, cognito service.CognitoService, ctx context.Context) {
+func (p *PatchServerHandler) HandleRequest(c *gin.Context, kubeService service.KubernetesService, cognito service.CognitoService, stripeService *service.StripeService, ctx context.Context) {
 	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
@@ -64,6 +64,19 @@ func (p *PatchServerHandler) HandleRequest(c *gin.Context, kubeService service.K
 	}
 
 	json.Unmarshal([]byte(serverDetails), &currentServerDetails)
+
+	limits, err := stripeService.GetSubscriptionLimits(user.SubscriptionId)
+	if err != nil {
+		log.Errorf("failed to get user subscription limits: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get subscription limit: %v", err)})
+		return
+	}
+	user.SubscriptionLimits = *limits
+
+	if *reqBody.BackupCount > user.SubscriptionLimits.MaxBackups {
+		reqBody.BackupCount = &user.SubscriptionLimits.MaxBackups
+		log.Infof("request max backups > users subscription limit: %d, new backup count set to limit: %d", user.SubscriptionLimits.MaxBackups, *reqBody.BackupCount)
+	}
 
 	config := MakeConfigWithDefaults(&reqBody)
 	valheimServer, err := PatchServerDeployment(config, kubeService, user)

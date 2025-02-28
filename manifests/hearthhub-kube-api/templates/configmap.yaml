@@ -22,7 +22,6 @@ data:
   GIN_MODE: "release"
 
   # Backup manager sidecar
-  MAX_BACKUPS: "3"
   BACKUP_FREQUENCY_MIN: "10"
 
   # Resources for valheim server

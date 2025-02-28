@@ -14,10 +14,11 @@ import (
 type StripeService struct{}
 
 type SubscriptionLimits struct {
-	CpuLimit    int `json:"cpuLimit"`
-	MemoryLimit int `json:"memoryLimit"`
-	MaxBackups  int `json:"maxBackups"`
-	MaxWorlds   int `json:"maxWorlds"`
+	CpuLimit            int  `json:"cpuLimit"`
+	MemoryLimit         int  `json:"memoryLimit"`
+	MaxBackups          int  `json:"maxBackups"`
+	MaxWorlds           int  `json:"maxWorlds"`
+	ExistingWorldUpload bool `json:"existingWorldUpload"`
 }
 
 func MakeStripeService() *StripeService {
@@ -54,7 +55,9 @@ func (s *StripeService) GetSubscriptionLimits(subscriptionId string) (*Subscript
 		return nil, fmt.Errorf("unexpected number of subscription items: %d", len(sub.Items.Data))
 	}
 
-	limits := SubscriptionLimits{}
+	limits := SubscriptionLimits{
+		ExistingWorldUpload: false,
+	}
 	productId := sub.Items.Data[0].Price.Product.ID
 
 	features := productfeature.List(&stripe.ProductFeatureListParams{
@@ -75,6 +78,8 @@ func (s *StripeService) GetSubscriptionLimits(subscriptionId string) (*Subscript
 		} else if strings.Contains(name, "Worlds") {
 			limit, _ := strconv.Atoi(strings.TrimSpace(strings.TrimSuffix(name, " Worlds")))
 			limits.MaxWorlds = limit
+		} else if strings.Contains(name, "Existing World Upload") {
+			limits.ExistingWorldUpload = true
 		}
 	}
 

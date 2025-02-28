@@ -160,7 +160,7 @@ type CreateServerHandler struct{}
 // responsible for creating the initial deployment and pvc which in turn creates the replicaset and pod for the src.
 // Future src management like mod installation, user termination requests, custom world uploads, etc... will use
 // the /api/v1/src/scale route to scale the replicas to 0-1 without removing the deployment or PVC.
-func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService service.KubernetesService, cognito service.CognitoService, ctx context.Context) {
+func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService service.KubernetesService, cognito service.CognitoService, stripeService *service.StripeService, ctx context.Context) {
 	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
@@ -203,8 +203,21 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService service.
 	// If src is nil it's the first time the user is booting up.
 	if serverDetails != "nil" {
 		json.Unmarshal([]byte(serverDetails), &res)
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("src: %s already exists for user: %s", res.DeploymentName, user.Email)})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("server: %s already exists for user: %s", res.DeploymentName, user.Email)})
 		return
+	}
+
+	limits, err := stripeService.GetSubscriptionLimits(user.SubscriptionId)
+	if err != nil {
+		log.Errorf("failed to get user subscription limits: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get subscription limit: %v", err)})
+		return
+	}
+	user.SubscriptionLimits = *limits
+
+	if *reqBody.BackupCount > user.SubscriptionLimits.MaxBackups {
+		reqBody.BackupCount = &user.SubscriptionLimits.MaxBackups
+		log.Infof("request max backups > users subscription limit: %d, new backup count set to limit: %d", user.SubscriptionLimits.MaxBackups, *reqBody.BackupCount)
 	}
 
 	config := MakeConfigWithDefaults(&reqBody)
@@ -243,7 +256,7 @@ func CreateDedicatedServerDeployment(config *cfg.Config, kubeService service.Kub
 	pvcName := fmt.Sprintf("valheim-pvc-%s", user.DiscordID)
 	deploymentName := fmt.Sprintf("valheim-%s", user.DiscordID)
 
-	log.Infof("src requests/limits: cpu=%d mem=%d, src args: %v", config.CpuRequest, config.MemoryRequest, serverArgs)
+	log.Infof("server requests/limits: cpu=%d mem=%d, server args: %v", config.CpuRequest, config.MemoryRequest, serverArgs)
 	labels := map[string]string{
 		"app":               "valheim",
 		"created-by":        deploymentName,
@@ -313,7 +326,7 @@ func CreateDedicatedServerDeployment(config *cfg.Config, kubeService service.Kub
 							Name:    "backup-manager",
 							Image:   fmt.Sprintf("%s:%s", os.Getenv("BACKUP_MANAGER_IMAGE_NAME"), os.Getenv("BACKUP_MANAGER_IMAGE_VERSION")),
 							Command: []string{"sh", "-c"},
-							Args:    []string{fmt.Sprintf("/app/main -mode backup -token %s", user.Credentials.RefreshToken)},
+							Args:    []string{fmt.Sprintf("/app/main -mode backup -max-backups %d -token %s", user.SubscriptionLimits.MaxBackups, user.Credentials.RefreshToken)},
 
 							// This container immediately tries to hit the kube api for pod labels and pod metrics. This startup probe
 							// ensures no timeouts occur while the pod data is propagating through etcd and the control plane API.
@@ -356,7 +369,6 @@ func CreateDedicatedServerDeployment(config *cfg.Config, kubeService service.Kub
 									},
 								},
 							},
-							// Ensure this container gets AWS creds so it can upload to S3
 							EnvFrom: []corev1.EnvFromSource{
 								{
 									SecretRef: &corev1.SecretEnvSource{

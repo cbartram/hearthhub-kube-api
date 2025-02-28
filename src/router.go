@@ -139,7 +139,7 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 
 	serverGroup.POST("/create", func(c *gin.Context) {
 		h := server.CreateServerHandler{}
-		h.HandleRequest(c, wrapper.KubeService, wrapper.CognitoService, ctx)
+		h.HandleRequest(c, wrapper.KubeService, wrapper.CognitoService, wrapper.StripeService, ctx)
 	})
 
 	serverGroup.DELETE("/delete", func(c *gin.Context) {
@@ -149,7 +149,7 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 
 	serverGroup.PUT("/update", func(c *gin.Context) {
 		h := server.PatchServerHandler{}
-		h.HandleRequest(c, wrapper.KubeService, wrapper.CognitoService, ctx)
+		h.HandleRequest(c, wrapper.KubeService, wrapper.CognitoService, wrapper.StripeService, ctx)
 	})
 
 	serverGroup.PUT("/scale", func(c *gin.Context) {
