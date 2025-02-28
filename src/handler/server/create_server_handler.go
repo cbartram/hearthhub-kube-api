@@ -399,7 +399,7 @@ func CreateDedicatedServerDeployment(config *cfg.Config, kubeService service.Kub
 								{
 									ConfigMapRef: &corev1.ConfigMapEnvSource{
 										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "src-config",
+											Name: "server-config",
 										},
 									},
 								},

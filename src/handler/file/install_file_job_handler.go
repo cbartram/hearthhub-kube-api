@@ -189,7 +189,7 @@ func CreateFileJob(clientset kubernetes.Interface, payload *FilePayload, user *s
 								{
 									ConfigMapRef: &corev1.ConfigMapEnvSource{
 										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "src-config",
+											Name: "server-config",
 										},
 									},
 								},

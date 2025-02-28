@@ -67,19 +67,19 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService service.K
 	}
 
 	if serverJson == "nil" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "valheim src does not exist. nothing to scale."})
+		c.JSON(http.StatusNotFound, gin.H{"error": "valheim server does not exist. nothing to scale."})
 		return
 	}
 
 	json.Unmarshal([]byte(serverJson), &server)
 
 	if server.State == cfg.RUNNING && *reqBody.Replicas == 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "src already running. replicas must be 0 when src state is: RUNNING"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "server already running. replicas must be 0 when server state is: RUNNING"})
 		return
 	}
 
 	if server.State == cfg.TERMINATED && *reqBody.Replicas == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no src to terminate. replicas must be 1 when src state is: TERMINATED"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no server to terminate. replicas must be 1 when server state is: TERMINATED"})
 		return
 	}
 
