@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/cbartram/hearthhub-mod-api/src"
 	"github.com/cbartram/hearthhub-mod-api/src/handler/stripe_handlers"
+	"github.com/cbartram/hearthhub-mod-api/src/model"
 	"github.com/cbartram/hearthhub-mod-api/src/service"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
@@ -46,6 +47,7 @@ func main() {
 		log.Printf("local kube config loaded successfully")
 	}
 
+	db := model.Connect()
 	stripeService := service.MakeStripeService()
 	kubeService := service.MakeKubernetesService(kubeConfig)
 	cognitoService := service.MakeCognitoService(cfg)
@@ -77,6 +79,7 @@ func main() {
 		KubeService:     kubeService,
 		StripeService:   stripeService,
 		RabbitMQService: rabbitMqService,
+		HearthhubDb:     db,
 	})
 
 	defer func() {

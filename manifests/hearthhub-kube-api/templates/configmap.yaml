@@ -20,6 +20,7 @@ data:
   API_BASE_URL: {{ .Values.api.baseUrl | quote }}
   RABBITMQ_BASE_URL: {{ .Values.api.rabbitmqBaseUrl | quote }}
   GIN_MODE: "release"
+  MYSQL_HOST: {{ .Values.db.host }}
 
   # Backup manager sidecar
   BACKUP_FREQUENCY_MIN: "10"

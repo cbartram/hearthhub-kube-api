@@ -9,6 +9,9 @@ stripe:
 s3:
   bucketName: "hearthhub-backups"
 
+db:
+  host: hearthhub-db.hearthhub.svc.cluster.local:3306
+
 api:
   # Base url for this API used by other services which need to call the API from within the cluster (i.e. file manager job)
   baseUrl: "https://hearthhub.duckdns.org"
@@ -19,7 +22,7 @@ image:
   pullPolicy: IfNotPresent
 
   # Tag for the API itself
-  tag: "0.0.81"
+  tag: "0.0.82"
 
   # Versions for images the API is responsible for deploying
   # i.e. sidecar container, valheim server, and mod/file manager

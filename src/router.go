@@ -10,6 +10,7 @@ import (
 	"github.com/cbartram/hearthhub-mod-api/src/service"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 	"log"
 	"net/http"
 	"os"
@@ -22,6 +23,7 @@ type ServiceWrapper struct {
 	CognitoService  service.CognitoService
 	KubeService     service.KubernetesService
 	RabbitMQService *service.RabbitMqService
+	HearthhubDb     *gorm.DB
 }
 
 // NewRouter Create a new gin router and instantiates the routes and route handlers for the entire API.
