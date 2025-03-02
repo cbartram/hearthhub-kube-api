@@ -16,7 +16,7 @@ import (
 func Connect() *gorm.DB {
 	db, err := gorm.Open(mysql.New(mysql.Config{
 		DSN:               fmt.Sprintf("%s:%s@tcp(%s:3306)/hearthhub?charset=utf8mb4&parseTime=True&loc=Local", os.Getenv("MYSQL_USER"), os.Getenv("MYSQL_PASSWORD"), os.Getenv("MYSQL_HOST")),
-		DefaultStringSize: 2048,
+		DefaultStringSize: 256,
 	}), &gorm.Config{})
 
 	if err != nil {

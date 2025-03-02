@@ -28,6 +28,8 @@ spec:
             - secretRef:
                 name: cognito-secrets
             - secretRef:
+                name: mysql-secrets
+            - secretRef:
                 name: stripe-secrets-{{ .Values.stripe.mode }}
             - secretRef:
                name: discord-secrets
