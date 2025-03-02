@@ -20,6 +20,7 @@ var (
 // This mapping is VERY important. It specifies the level of authorization required to access each resource (frontend page).
 var authorizationMap = map[string]AuthorizationLevel{
 	"pricing":   CognitoAuth,
+	"profile":   CognitoAuth,
 	"dashboard": CognitoAndStripeAuth,
 	"landing":   NoAuth,
 	"login":     NoAuth,
