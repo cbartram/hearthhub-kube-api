@@ -69,7 +69,7 @@ func (h *AuthHandler) HandleRequest(c *gin.Context, ctx context.Context, cognito
 	}
 
 	// Else we know it requires both cognito and stripe so proceed to verify stripe
-	ok, err = stripeService.VerifyActiveSubscription(cognitoUser.CustomerId, cognitoUser.SubscriptionId)
+	status, ok, err := stripeService.VerifyActiveSubscription(cognitoUser.CustomerId, cognitoUser.SubscriptionId)
 	if err != nil {
 		log.Errorf("unable to verify stripe subscription status: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{
@@ -79,7 +79,7 @@ func (h *AuthHandler) HandleRequest(c *gin.Context, ctx context.Context, cognito
 	}
 
 	if !ok {
-		log.Errorf("invalid or expired stripe subscription: %v", err)
+		log.Errorf("invalid or expired stripe subscription, subscription status: %s,  error: %v", status, err)
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error": "invalid subscription",
 		})
@@ -96,6 +96,6 @@ func (h *AuthHandler) HandleRequest(c *gin.Context, ctx context.Context, cognito
 	}
 
 	cognitoUser.SubscriptionLimits = *limits
-	log.Infof("user auth ok -- stripe sub verified for resource: %s", resource)
+	log.Infof("user auth ok -- stripe sub verified: %s, for resource: %s", status, resource)
 	c.JSON(http.StatusOK, cognitoUser)
 }

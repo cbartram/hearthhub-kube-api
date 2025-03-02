@@ -32,17 +32,17 @@ func MakeStripeService() *StripeService {
 }
 
 // VerifyActiveSubscription checks if a subscription is active for a given customer
-func (s *StripeService) VerifyActiveSubscription(customerId string, subscriptionId string) (bool, error) {
+func (s *StripeService) VerifyActiveSubscription(customerId string, subscriptionId string) (string, bool, error) {
 	sub, err := subscription.Get(subscriptionId, nil)
 	if err != nil {
-		return false, fmt.Errorf("error retrieving subscription: %v", err)
+		return "", false, fmt.Errorf("error retrieving subscription: %v", err)
 	}
 
 	if sub.Customer.ID != customerId {
-		return false, fmt.Errorf("subscription does not belong to customer %s", customerId)
+		return "", false, fmt.Errorf("subscription does not belong to customer %s", customerId)
 	}
 
-	return sub.Status == stripe.SubscriptionStatusActive || sub.Status == stripe.SubscriptionStatusTrialing, nil
+	return string(sub.Status), sub.Status == stripe.SubscriptionStatusActive || sub.Status == stripe.SubscriptionStatusTrialing, nil
 }
 
 func (s *StripeService) GetSubscriptionLimits(subscriptionId string) (*SubscriptionLimits, error) {
