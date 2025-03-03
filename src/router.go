@@ -29,9 +29,12 @@ type ServiceWrapper struct {
 // NewRouter Create a new gin router and instantiates the routes and route handlers for the entire API.
 func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebSocketManager) {
 	logger := logrus.New()
-	logger.SetFormatter(&logrus.TextFormatter{
+	fmt := &logrus.TextFormatter{
 		FullTimestamp: false,
-	})
+		ForceColors:   true,
+	}
+	logger.SetFormatter(fmt)
+	logrus.SetFormatter(fmt)
 
 	logLevel, err := logrus.ParseLevel(os.Getenv("LOG_LEVEL"))
 	if err != nil {
@@ -110,7 +113,7 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 
 	cognitoGroup.POST("/create-user", func(c *gin.Context) {
 		h := cognito.CreateUserRequestHandler{}
-		h.HandleRequest(c, ctx, wrapper.CognitoService)
+		h.HandleRequest(c, ctx, wrapper.CognitoService, wrapper.HearthhubDb)
 	})
 
 	//  Authorized routes below

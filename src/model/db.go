@@ -23,6 +23,7 @@ func Connect() *gorm.DB {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
 
+	log.Infof("migrating database")
 	err = db.AutoMigrate(
 		&User{},
 		&Server{},
@@ -96,12 +97,10 @@ func (cc *CognitoCredentials) Scan(value interface{}) error {
 // User represents a user of the system
 type User struct {
 	ID              uint               `gorm:"primaryKey" json:"id"`
-	CognitoID       string             `gorm:"column:cognito_id;uniqueIndex" json:"cognitoId,omitempty"`
 	DiscordUsername string             `gorm:"column:discord_username" json:"discordUsername,omitempty"`
-	Email           string             `gorm:"column:email;uniqueIndex" json:"email,omitempty"`
+	Email           string             `gorm:"column:email" json:"email,omitempty"`
 	AvatarId        string             `gorm:"column:avatar_id" json:"avatarId"`
-	Enabled         bool               `gorm:"column:enabled" json:"enabled"`
-	DiscordID       string             `gorm:"column:discord_id" json:"discordId,omitempty"`
+	DiscordID       string             `gorm:"column:discord_id;uniqueIndex" json:"discordId,omitempty"`
 	CustomerId      string             `gorm:"column:customer_id" json:"customerId,omitempty"`
 	SubscriptionId  string             `gorm:"column:subscription_id" json:"subscriptionId"`
 	Credentials     CognitoCredentials `gorm:"type:json" json:"credentials,omitempty"`
@@ -117,7 +116,6 @@ type User struct {
 	WorldFiles  []WorldFile  `gorm:"foreignKey:UserID" json:"world_files,omitempty"`
 }
 
-// TableName overrides the table name
 func (User) TableName() string {
 	return "users"
 }
@@ -145,7 +143,6 @@ type Server struct {
 	WorldFiles []WorldFile `gorm:"foreignKey:ServerID" json:"world_files,omitempty"`
 }
 
-// TableName overrides the table name
 func (Server) TableName() string {
 	return "servers"
 }
@@ -170,7 +167,6 @@ type BackupFile struct {
 	BaseFile
 }
 
-// TableName overrides the table name
 func (BackupFile) TableName() string {
 	return "backup_files"
 }
@@ -180,12 +176,11 @@ type ConfigFile struct {
 	BaseFile
 }
 
-// TableName overrides the table name
 func (ConfigFile) TableName() string {
 	return "config_files"
 }
 
-// ModFile represents a server mod file
+// ModFile represents a server mod .zip archive
 type ModFile struct {
 	BaseFile
 	UpVotes            int       `gorm:"column:upvotes" json:"upvotes"`
@@ -197,12 +192,11 @@ type ModFile struct {
 	Description        string    `json:"description"`
 }
 
-// TableName overrides the table name
 func (ModFile) TableName() string {
 	return "mod_files"
 }
 
-// WorldFile represents a world save file
+// WorldFile represents a world save file (which is not a backup).
 type WorldFile struct {
 	BaseFile
 	ServerID uint `gorm:"column:server_id;index" json:"server_id"`
@@ -211,7 +205,6 @@ type WorldFile struct {
 	Server Server `gorm:"foreignKey:ServerID" json:"-"`
 }
 
-// TableName overrides the table name
 func (WorldFile) TableName() string {
 	return "world_files"
 }

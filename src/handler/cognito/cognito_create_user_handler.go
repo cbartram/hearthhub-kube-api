@@ -4,9 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/cbartram/hearthhub-mod-api/src/model"
 	"github.com/cbartram/hearthhub-mod-api/src/service"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+	"github.com/stripe/stripe-go/v81"
+	"github.com/stripe/stripe-go/v81/customer"
+	"gorm.io/gorm"
 	"io"
 	"net/http"
 )
@@ -17,7 +21,7 @@ type CreateUserRequestHandler struct{}
 // OAuth flow. It will return a Cognito refresh token AND access token which will be used by the Kraken service to authenticate a user
 // in subsequent runs. In subsequent runs a user who is attempting to authenticate must use their refresh token to gain
 // an access token.
-func (h *CreateUserRequestHandler) HandleRequest(c *gin.Context, ctx context.Context, cognitoService service.CognitoService) {
+func (h *CreateUserRequestHandler) HandleRequest(c *gin.Context, ctx context.Context, cognitoService service.CognitoService, db *gorm.DB) {
 	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
@@ -32,8 +36,11 @@ func (h *CreateUserRequestHandler) HandleRequest(c *gin.Context, ctx context.Con
 	}
 
 	// We want to assert that the user does not exist before we create it.
-	user, _ := cognitoService.FindUserByAttribute(context.Background(), "name", reqBody.DiscordID)
-	if user == nil {
+	var user model.User
+	tx := db.Where("discord_id = ?", reqBody.DiscordID).First(&user)
+
+	if tx.RowsAffected == 0 {
+		log.Infof("no user found with id: %s, creating user", reqBody.DiscordID)
 		creds, err := cognitoService.CreateCognitoUser(ctx, &reqBody)
 		if err != nil {
 			log.Errorf("error while creating new cognito user: %s", err)
@@ -43,24 +50,50 @@ func (h *CreateUserRequestHandler) HandleRequest(c *gin.Context, ctx context.Con
 			return
 		}
 
-		// Note: this does not provide the cognito id. However, users are located via username (discord id) not cognito id.
-		c.JSON(http.StatusOK, service.CognitoUser{
-			DiscordUsername:  reqBody.DiscordUsername,
-			Email:            reqBody.DiscordEmail,
-			DiscordID:        reqBody.DiscordID,
-			AvatarId:         reqBody.AvatarId,
-			InstalledMods:    map[string]bool{}, // A user has no mods installed when first created so this is safe
-			InstalledBackups: map[string]bool{},
-			InstalledConfig:  map[string]bool{},
-			Credentials: service.CognitoCredentials{
+		cust, err := customer.New(&stripe.CustomerParams{
+			Params: stripe.Params{},
+			Email:  &reqBody.DiscordEmail,
+			Metadata: map[string]string{
+				"discord-id":       reqBody.DiscordID,
+				"discord-username": reqBody.DiscordUsername,
+			},
+			Name: &reqBody.DiscordUsername,
+		})
+
+		if err != nil {
+			log.Errorf("error while creating new stripe customer: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "error while creating new stripe user: " + err.Error(),
+			})
+			return
+		}
+
+		newUser := model.User{
+			DiscordUsername: reqBody.DiscordUsername,
+			Email:           reqBody.DiscordEmail,
+			DiscordID:       reqBody.DiscordID,
+			AvatarId:        reqBody.AvatarId,
+			CustomerId:      cust.ID,
+			SubscriptionId:  "",
+			Credentials: model.CognitoCredentials{
 				RefreshToken:    *creds.RefreshToken,
 				AccessToken:     *creds.AccessToken,
 				TokenExpiration: creds.ExpiresIn,
 				IdToken:         *creds.IdToken,
 			},
-		})
+		}
+
+		tx = db.Create(&newUser)
+		if tx.Error != nil {
+			log.Errorf("error while creating new user: %v", tx.Error)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "error while creating new user: " + tx.Error.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, newUser)
 	} else {
-		// User already exists.
 		log.Infof("user already exists, refreshing session")
 		creds, err := cognitoService.RefreshSession(ctx, reqBody.DiscordID)
 		if err != nil {
@@ -71,26 +104,13 @@ func (h *CreateUserRequestHandler) HandleRequest(c *gin.Context, ctx context.Con
 			return
 		}
 
-		var installedMods, installedBackups, installedConfig map[string]bool
-		for _, attr := range user.Attributes {
-			if *attr.Name == "custom:installed_mods" {
-				json.Unmarshal([]byte(*attr.Value), &installedMods)
-			} else if *attr.Name == "custom:installed_backups" {
-				json.Unmarshal([]byte(*attr.Value), &installedBackups)
-			} else if *attr.Name == "custom:installed_config" {
-				json.Unmarshal([]byte(*attr.Value), &installedConfig)
-			}
+		user.Credentials = model.CognitoCredentials{
+			RefreshToken:    creds.RefreshToken,
+			AccessToken:     creds.AccessToken,
+			IdToken:         creds.IdToken,
+			TokenExpiration: creds.TokenExpiration,
 		}
 
-		c.JSON(http.StatusOK, service.CognitoUser{
-			DiscordUsername:  reqBody.DiscordUsername,
-			Email:            reqBody.DiscordEmail,
-			DiscordID:        reqBody.DiscordID,
-			AvatarId:         reqBody.AvatarId,
-			InstalledMods:    installedMods,
-			InstalledBackups: installedBackups,
-			InstalledConfig:  installedConfig,
-			Credentials:      *creds,
-		})
+		c.JSON(http.StatusOK, user)
 	}
 }

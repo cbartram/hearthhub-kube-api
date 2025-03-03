@@ -171,22 +171,6 @@ func (m *CognitoServiceImpl) CreateCognitoUser(ctx context.Context, createUserPa
 			Name:  aws.String("custom:refresh_token"),
 			Value: aws.String("nil"),
 		},
-		{
-			Name:  aws.String("custom:server_details"),
-			Value: aws.String("nil"),
-		},
-		{
-			Name:  aws.String("custom:installed_mods"),
-			Value: aws.String("{}"),
-		},
-		{
-			Name:  aws.String("custom:installed_backups"),
-			Value: aws.String("{}"),
-		},
-		{
-			Name:  aws.String("custom:installed_config"),
-			Value: aws.String("{}"),
-		},
 	}
 
 	_, err := m.cognitoClient.AdminCreateUser(ctx, &cognitoidentityprovider.AdminCreateUserInput{
@@ -201,7 +185,7 @@ func (m *CognitoServiceImpl) CreateCognitoUser(ctx context.Context, createUserPa
 		return nil, fmt.Errorf("error creating user: %w", err)
 	}
 
-	// Set permanent password although users will never actually log in with a user/pass combo. The Kraken service will use the Cognito refresh token
+	// Set permanent password although users will never actually log in with a user/pass combo. The service will use the Cognito refresh token
 	// to try and get an access token for the user and authenticate with the access token.
 	_, err = m.cognitoClient.AdminSetUserPassword(ctx, &cognitoidentityprovider.AdminSetUserPasswordInput{
 		UserPoolId: aws.String(m.userPoolID),
@@ -213,7 +197,6 @@ func (m *CognitoServiceImpl) CreateCognitoUser(ctx context.Context, createUserPa
 		return nil, fmt.Errorf("error setting permanent password: %w", err)
 	}
 
-	// Initialize auth session
 	return m.initiateAuthUserPass(ctx, createUserPayload.DiscordID, password)
 }
 
@@ -236,8 +219,7 @@ func (m *CognitoServiceImpl) initiateAuthUserPass(ctx context.Context, discordID
 		return nil, fmt.Errorf("error initiating admin user/pass auth with user pool: %w", err)
 	}
 
-	// Add refresh token as custom attribute. This enables admins to get credentials on behalf of a user when
-	// purchasing plugins through the Discord ticket system.
+	// Add refresh token as custom attribute. This enables admins to get credentials on behalf of a user
 	attributes := make([]types.AttributeType, 0)
 	attrName := "custom:refresh_token"
 	attributes = append(attributes, types.AttributeType{

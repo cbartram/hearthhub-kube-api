@@ -59,12 +59,20 @@ func (h *AuthHandler) HandleRequest(c *gin.Context, ctx context.Context, cognito
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error": "user unauthorized",
 		})
+		return
 	}
 
 	// The user does not need stripe sub to access the resource
 	if authorizationValue == CognitoAuth || authorizationValue == NoAuth {
 		log.Infof("user auth ok, no stripe sub required for resource: %s", resource)
 		c.JSON(http.StatusOK, cognitoUser)
+		return
+	}
+
+	if len(cognitoUser.SubscriptionId) == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "user has no subscription, id is blank",
+		})
 		return
 	}
 
