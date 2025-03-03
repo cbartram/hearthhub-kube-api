@@ -10,22 +10,6 @@ import (
 )
 
 type AuthHandler struct{}
-type AuthorizationLevel string
-
-var (
-	NoAuth               AuthorizationLevel = "NO_AUTH"
-	CognitoAuth          AuthorizationLevel = "COGNITO_AUTH"
-	CognitoAndStripeAuth AuthorizationLevel = "COGNITO_STRIPE_AUTH"
-)
-
-// This mapping is VERY important. It specifies the level of authorization required to access each resource (frontend page).
-var authorizationMap = map[string]AuthorizationLevel{
-	"pricing":   CognitoAuth,
-	"profile":   CognitoAuth,
-	"dashboard": CognitoAndStripeAuth,
-	"landing":   NoAuth,
-	"login":     NoAuth,
-}
 
 // HandleRequest Authenticates that a refresh token is valid for a given user id. This returns the entire
 // user object with a refreshed access token.
@@ -39,20 +23,6 @@ func (h *AuthHandler) HandleRequest(c *gin.Context, ctx context.Context, wrapper
 
 	user := tmp.(*model.User)
 
-	resource, ok := c.GetQuery("resource")
-	if !ok {
-		log.Errorf("no resource specified to auth access")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no resource specified"})
-		return
-	}
-
-	authorizationValue, exists := authorizationMap[resource]
-	if !exists {
-		log.Errorf("invalid resource")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid resource specified"})
-		return
-	}
-
 	log.Infof("authenticating user with discord id: %s", user.DiscordID)
 	user, err := wrapper.CognitoService.AuthUser(ctx, &user.Credentials.RefreshToken, &user.DiscordID, wrapper.HearthhubDb)
 	if err != nil {
@@ -63,34 +33,11 @@ func (h *AuthHandler) HandleRequest(c *gin.Context, ctx context.Context, wrapper
 		return
 	}
 
-	// The user does not need stripe sub to access the resource
-	if authorizationValue == CognitoAuth || authorizationValue == NoAuth {
-		log.Infof("user auth ok, no stripe sub required for resource: %s", resource)
-		c.JSON(http.StatusOK, user)
-		return
-	}
-
-	if len(user.SubscriptionId) == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "user has no subscription, id is blank",
-		})
-		return
-	}
-
-	// Else we know it requires both cognito and stripe so proceed to verify stripe
-	status, ok, err := wrapper.StripeService.VerifyActiveSubscription(user.CustomerId, user.SubscriptionId)
+	status, err := wrapper.StripeService.GetActiveSubscription(user.CustomerId, user.SubscriptionId)
 	if err != nil {
 		log.Errorf("unable to verify stripe subscription status: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error": "unable to verify stripe subscription status",
-		})
-		return
-	}
-
-	if !ok {
-		log.Errorf("invalid or expired stripe subscription, subscription status: %s,  error: %v", status, err)
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "invalid subscription",
 		})
 		return
 	}
@@ -106,6 +53,5 @@ func (h *AuthHandler) HandleRequest(c *gin.Context, ctx context.Context, wrapper
 
 	user.SubscriptionLimits = *limits
 	user.SubscriptionStatus = status
-	log.Infof("user auth ok -- stripe sub verified: %s, for resource: %s", status, resource)
 	c.JSON(http.StatusOK, user)
 }

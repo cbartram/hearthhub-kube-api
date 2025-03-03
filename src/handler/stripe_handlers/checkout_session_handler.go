@@ -11,7 +11,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stripe/stripe-go/v81"
 	"github.com/stripe/stripe-go/v81/checkout/session"
-	"github.com/stripe/stripe-go/v81/customer"
 	"github.com/stripe/stripe-go/v81/price"
 	"net/http"
 	"os"
@@ -58,30 +57,6 @@ func (h *CheckoutSessionHandler) HandleRequest(c *gin.Context, cognito service.C
 		return
 	}
 
-	if user.CustomerId == "" {
-		// Create a Stripe customer first
-		customerParams := &stripe.CustomerParams{
-			Email: stripe.String(user.Email),
-			Metadata: map[string]string{
-				"discordId": user.DiscordID,
-			},
-		}
-
-		createdCustomer, err := customer.New(customerParams)
-		if err != nil {
-			log.Errorf("failed to create new stripe customer: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("failed to create new stripe customer: %v", err),
-			})
-			return
-		}
-
-		user.CustomerId = createdCustomer.ID
-		log.Infof("created customer with id: %s", user.CustomerId)
-	} else {
-		log.Infof("customer already exists with id: %s", user.CustomerId)
-	}
-
 	host := util.GetHostname()
 	params := &stripe.CheckoutSessionParams{
 		LineItems: []*stripe.CheckoutSessionLineItemParams{{
@@ -89,7 +64,7 @@ func (h *CheckoutSessionHandler) HandleRequest(c *gin.Context, cognito service.C
 			Quantity: stripe.Int64(1),
 		},
 		},
-		Customer:          stripe.String(user.CustomerId),
+		Customer:          stripe.String(user.CustomerId), // The stripe user is created when the user is created
 		ClientReferenceID: stripe.String(user.DiscordID),
 		Mode:              stripe.String(string(stripe.CheckoutSessionModeSubscription)),
 		SuccessURL:        stripe.String(host + "/pricing?success=true&session_id={CHECKOUT_SESSION_ID}"),

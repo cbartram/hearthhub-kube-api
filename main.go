@@ -67,7 +67,7 @@ func main() {
 	// Registers a new go routine listening to the stripe-webhooks channel. New messages are enqueued when the /api/v1/stripe/webhook
 	// endpoint is called and this function consumes the messages with a 5-second delay in between each message resolving eventual consistency
 	// issues with both cognito and stripe when many events are sent at checkout.
-	err = rabbitMqService.RegisterConsumer(stripe_handlers.ConsumeMessageWithDelay, 3*time.Second, cognitoService)
+	err = rabbitMqService.RegisterConsumer(stripe_handlers.ConsumeMessageWithDelay, 3*time.Second, db)
 	if err != nil {
 		logrus.Errorf("failed to register stripe webhook message consumer: %v", err)
 	}

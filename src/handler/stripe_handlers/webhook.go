@@ -1,15 +1,15 @@
 package stripe_handlers
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
+	"github.com/cbartram/hearthhub-mod-api/src/model"
 	"github.com/cbartram/hearthhub-mod-api/src/service"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"github.com/stripe/stripe-go/v81"
 	"github.com/stripe/stripe-go/v81/webhook"
+	"gorm.io/gorm"
 	"io"
 	"net/http"
 	"os"
@@ -17,7 +17,7 @@ import (
 
 type WebhookHandler struct{}
 
-func ConsumeMessageWithDelay(message service.Message, cognito service.CognitoService) {
+func ConsumeMessageWithDelay(message service.Message, db *gorm.DB) {
 	log.Infof("processing rabbitmq message type: %s", message.Type)
 
 	switch message.Type {
@@ -29,39 +29,27 @@ func ConsumeMessageWithDelay(message service.Message, cognito service.CognitoSer
 			return
 		}
 
-		user, err := cognito.FindUserByAttribute(context.Background(), "custom:stripe_customer_id", subscription.Customer.ID)
-		if err != nil {
-			log.Errorf("failed to find user with customer id: %s, error: %v", subscription.ID, err)
+		var user model.User
+		tx := db.Model(&model.User{}).Where("customer_id = ?", subscription.Customer.ID).First(&user)
+		if tx.Error != nil {
+			log.Errorf("failed to find user with customer id: %s, error: %v", subscription.Customer.ID, err)
 			return
 		}
 
-		if user == nil {
-			log.Errorf("no cognito user found with customer id: %s", subscription.ID)
-			return
-		}
-
-		var attribute types.AttributeType
+		// Sub status for users are retrieved directly from stripe every time to ensure we have to maintain as little
+		// stripe state as possible. Therefore, future webhooks like subscription updated, deleted, and trial will end which
+		// mutate sub status can be ignored.
 		if message.Type == "customer.subscription.created" {
-			attribute = types.AttributeType{
-				Name:  stripe.String("custom:stripe_sub_id"),
-				Value: stripe.String(subscription.ID),
-			}
-		} else {
-			// sub updates, pauses, and cancellations both affect the sub_status field and will update it to either:
-			// "active", "paused" or "canceled"
-			attribute = types.AttributeType{
-				Name:  stripe.String("custom:stripe_sub_status"),
-				Value: stripe.String(string(subscription.Status)),
-			}
+			user.SubscriptionId = subscription.ID
 		}
 
-		err = cognito.AdminUpdateUserAttributes(context.Background(), *user.Username, []types.AttributeType{attribute})
-
-		if err != nil {
-			log.Errorf("failed to update cognito with stripe subscription id: %s, error: %v", subscription.ID, err)
+		tx = db.Save(&user)
+		if tx.Error != nil {
+			log.Errorf("failed to update user with stripe subscription id: %s, error: %v", subscription.ID, err)
 			return
 		}
-		log.Infof("subscription updated for user %s, id: %s, status: %s", *user.Username, subscription.ID, subscription.Status)
+
+		log.Infof("subscription updated for user %s, id: %s, status: %s", user.DiscordUsername, subscription.ID, subscription.Status)
 	}
 }
 

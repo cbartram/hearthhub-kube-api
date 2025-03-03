@@ -5,6 +5,7 @@ import (
 	"fmt"
 	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 	"os"
 	"time"
 )
@@ -116,7 +117,7 @@ func (r *RabbitMqService) PublishMessage(message *Message) error {
 	)
 }
 
-func (r *RabbitMqService) RegisterConsumer(consumer func(message Message, cognito CognitoService), delay time.Duration, cognito CognitoService) error {
+func (r *RabbitMqService) RegisterConsumer(consumer func(message Message, db *gorm.DB), delay time.Duration, db *gorm.DB) error {
 	msgs, err := r.ConsumeChannel.Consume(
 		r.Queue.Name,
 		"",
@@ -140,7 +141,7 @@ func (r *RabbitMqService) RegisterConsumer(consumer func(message Message, cognit
 				log.Errorf("error unmarshaling stripe websocket message: %v", err)
 				continue
 			}
-			consumer(message, cognito)
+			consumer(message, db)
 		}
 	}()
 

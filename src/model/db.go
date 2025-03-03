@@ -182,14 +182,12 @@ type User struct {
 
 func GetUser(discordId string, db *gorm.DB) (*User, error) {
 	var user User
-	tx := db.Model(&User{}).
-		Select("*").
+	tx := db.Preload("Servers").
+		Preload("ModFiles").
+		Preload("ConfigFiles").
+		Preload("BackupFiles").
+		Preload("WorldFiles").
 		Where("discord_id = ?", discordId).
-		Joins("LEFT JOIN servers ON servers.user_id = users.id").
-		Joins("LEFT JOIN mod_files ON mod_files.user_id = users.id").
-		Joins("LEFT JOIN config_files ON config_files.user_id = users.id").
-		Joins("LEFT JOIN backup_files ON backup_files.user_id = users.id").
-		Joins("LEFT JOIN world_files ON world_files.user_id = users.id").
 		First(&user)
 
 	if tx.Error != nil {
