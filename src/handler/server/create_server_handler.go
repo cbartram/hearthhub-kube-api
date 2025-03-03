@@ -344,6 +344,13 @@ func CreateDedicatedServerDeployment(world *model.WorldDetails, kubeService serv
 										},
 									},
 								},
+								{
+									SecretRef: &corev1.SecretEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "mysql-secrets",
+										},
+									},
+								},
 								// Required if the mode is set to publish
 								{
 									SecretRef: &corev1.SecretEnvSource{

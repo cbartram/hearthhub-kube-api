@@ -197,6 +197,13 @@ func CreateFileJob(clientset kubernetes.Interface, payload *FilePayload, user *m
 								{
 									SecretRef: &corev1.SecretEnvSource{
 										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "mysql-secrets",
+										},
+									},
+								},
+								{
+									SecretRef: &corev1.SecretEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
 											Name: "aws-creds",
 										},
 									},

@@ -173,11 +173,11 @@ type User struct {
 	DeletedAt          gorm.DeletedAt     `gorm:"index" json:"deleted_at,omitempty"`
 
 	// Relations
-	Servers     []Server     `gorm:"foreignKey:UserID" json:"servers,omitempty"`
-	ModFiles    []ModFile    `gorm:"foreignKey:UserID" json:"mod_files,omitempty"`
-	ConfigFiles []ConfigFile `gorm:"foreignKey:UserID" json:"config_files,omitempty"`
-	BackupFiles []BackupFile `gorm:"foreignKey:UserID" json:"backup_files,omitempty"`
-	WorldFiles  []WorldFile  `gorm:"foreignKey:UserID" json:"world_files,omitempty"`
+	Servers     []Server     `gorm:"foreignKey:UserID" json:"servers"`
+	ModFiles    []ModFile    `gorm:"foreignKey:UserID" json:"mod_files"`
+	ConfigFiles []ConfigFile `gorm:"foreignKey:UserID" json:"config_files"`
+	BackupFiles []BackupFile `gorm:"foreignKey:UserID" json:"backup_files"`
+	WorldFiles  []WorldFile  `gorm:"foreignKey:UserID" json:"world_files"`
 }
 
 func GetUser(discordId string, db *gorm.DB) (*User, error) {
