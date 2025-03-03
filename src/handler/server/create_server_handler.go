@@ -4,8 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
-	"github.com/cbartram/hearthhub-mod-api/src/cfg"
+	"github.com/cbartram/hearthhub-mod-api/src/model"
 	"github.com/cbartram/hearthhub-mod-api/src/service"
 	"github.com/cbartram/hearthhub-mod-api/src/util"
 	"github.com/gin-gonic/gin"
@@ -23,40 +22,40 @@ import (
 )
 
 type CreateServerRequest struct {
-	Name                  *string        `json:"name"`
-	World                 *string        `json:"world"`
-	MemoryRequest         *int           `json:"memory_request"`
-	CpuRequest            *int           `json:"cpu_request"`
-	Password              *string        `json:"password"`
-	Port                  *string        `json:"port"`
-	EnableCrossplay       *bool          `json:"enable_crossplay,omitempty"`
-	Public                *bool          `json:"public,omitempty"`
-	Modifiers             []cfg.Modifier `json:"modifiers,omitempty"`
-	SaveIntervalSeconds   *int           `json:"save_interval_seconds,omitempty"`
-	BackupCount           *int           `json:"backup_count,omitempty"`
-	InitialBackupSeconds  *int           `json:"initial_backup_seconds,omitempty"`
-	BackupIntervalSeconds *int           `json:"backup_interval_seconds,omitempty"`
+	Name                  *string          `json:"name"`
+	World                 *string          `json:"world"`
+	MemoryRequest         *int             `json:"memory_request"`
+	CpuRequest            *int             `json:"cpu_request"`
+	Password              *string          `json:"password"`
+	Port                  *string          `json:"port"`
+	EnableCrossplay       *bool            `json:"enable_crossplay,omitempty"`
+	Public                *bool            `json:"public,omitempty"`
+	Modifiers             []model.Modifier `json:"modifiers,omitempty"`
+	SaveIntervalSeconds   *int             `json:"save_interval_seconds,omitempty"`
+	BackupCount           *int             `json:"backup_count,omitempty"`
+	InitialBackupSeconds  *int             `json:"initial_backup_seconds,omitempty"`
+	BackupIntervalSeconds *int             `json:"backup_interval_seconds,omitempty"`
 }
 
-// MakeConfigWithDefaults creates a new ServerConfig with default values
+// MakeWorldWithDefaults creates a new struct holding WorldDetails like name, port, backup count etc... with default values
 // that can be selectively overridden by provided options
-func MakeConfigWithDefaults(options *CreateServerRequest) *cfg.Config {
+func MakeWorldWithDefaults(options *CreateServerRequest) *model.WorldDetails {
 	cpuLimit, _ := strconv.Atoi(os.Getenv("CPU_LIMIT"))
 	memLimit, _ := strconv.Atoi(os.Getenv("MEMORY_LIMIT"))
 
-	config := &cfg.Config{
+	worldDetails := &model.WorldDetails{
 		Name:                  *options.Name,
 		World:                 *options.World,
 		Port:                  "2456",
 		Password:              *options.Password,
 		EnableCrossplay:       false,
 		Public:                false,
-		InstanceId:            util.GenerateInstanceId(8),
+		InstanceID:            util.GenerateInstanceId(8),
 		SaveIntervalSeconds:   1800,
 		BackupCount:           3,
 		InitialBackupSeconds:  7200,
 		BackupIntervalSeconds: 43200,
-		Modifiers:             []cfg.Modifier{},
+		Modifiers:             []model.Modifier{},
 	}
 
 	// If no cpu/memory were provided (nil) default to the limits. If cpu and mem were provided
@@ -64,51 +63,51 @@ func MakeConfigWithDefaults(options *CreateServerRequest) *cfg.Config {
 	// so set to the provided value
 	if options.CpuRequest == nil {
 		log.Infof("no cpu request specified in req: defaulting to limit: %d", cpuLimit)
-		config.CpuRequest = cpuLimit
+		worldDetails.CPURequests = cpuLimit
 	} else if *options.CpuRequest > cpuLimit {
 		log.Infof("CPU limit (%d) exceeds maximum CPU limit (%d)", *options.CpuRequest, cpuLimit)
-		config.CpuRequest = cpuLimit
+		worldDetails.CPURequests = cpuLimit
 	} else {
-		config.CpuRequest = *options.CpuRequest
+		worldDetails.CPURequests = *options.CpuRequest
 	}
 
 	if options.MemoryRequest == nil {
 		log.Infof("no memory request specified in req: defaulting to limit: %d", memLimit)
-		config.MemoryRequest = memLimit
+		worldDetails.MemoryRequests = memLimit
 	} else if *options.MemoryRequest > memLimit {
 		log.Infof("memory request (%d) exceeds maximum memory limit (%d)", *options.MemoryRequest, memLimit)
-		config.MemoryRequest = memLimit
+		worldDetails.MemoryRequests = memLimit
 	} else {
-		config.MemoryRequest = *options.MemoryRequest
+		worldDetails.MemoryRequests = *options.MemoryRequest
 	}
 
 	// Override defaults with any provided options
 	if options.Port != nil {
-		config.Port = *options.Port
+		worldDetails.Port = *options.Port
 	}
 	if options.EnableCrossplay != nil {
-		config.EnableCrossplay = *options.EnableCrossplay
+		worldDetails.EnableCrossplay = *options.EnableCrossplay
 	}
 	if options.Public != nil {
-		config.Public = *options.Public
+		worldDetails.Public = *options.Public
 	}
 	if len(options.Modifiers) > 0 {
-		config.Modifiers = options.Modifiers
+		worldDetails.Modifiers = options.Modifiers
 	}
 	if options.SaveIntervalSeconds != nil {
-		config.SaveIntervalSeconds = *options.SaveIntervalSeconds
+		worldDetails.SaveIntervalSeconds = *options.SaveIntervalSeconds
 	}
 	if options.BackupCount != nil {
-		config.BackupCount = *options.BackupCount
+		worldDetails.BackupCount = *options.BackupCount
 	}
 	if options.InitialBackupSeconds != nil {
-		config.InitialBackupSeconds = *options.InitialBackupSeconds
+		worldDetails.InitialBackupSeconds = *options.InitialBackupSeconds
 	}
 	if options.BackupIntervalSeconds != nil {
-		config.BackupIntervalSeconds = *options.BackupIntervalSeconds
+		worldDetails.BackupIntervalSeconds = *options.BackupIntervalSeconds
 	}
 
-	return config
+	return worldDetails
 }
 
 func (c *CreateServerRequest) Validate() error {
@@ -117,42 +116,29 @@ func (c *CreateServerRequest) Validate() error {
 	}
 
 	var validModifiers = map[string][]string{
-		"combat":       {cfg.VERY_EASY, cfg.EASY, cfg.HARD, cfg.VERY_HARD},
-		"deathpenalty": {cfg.CASUAL, cfg.VERY_EASY, cfg.EASY, cfg.HARD, cfg.HARDCORE}, // TODO unsure if this is camel or all lowercase
-		"resources":    {cfg.MUCH_LESS, cfg.LESS, cfg.MORE, cfg.MUCHMORE, cfg.MOST},
-		"raids":        {cfg.NONE, cfg.MUCH_LESS, cfg.LESS, cfg.MORE, cfg.MUCHMORE},
-		"portals":      {cfg.CASUAL, cfg.HARD, cfg.VERY_HARD},
+		"combat":       {model.VERY_EASY, model.EASY, model.HARD, model.VERY_HARD},
+		"deathpenalty": {model.CASUAL, model.VERY_EASY, model.EASY, model.HARD, model.HARDCORE}, // TODO unsure if this is camel or all lowercase
+		"resources":    {model.MUCH_LESS, model.LESS, model.MORE, model.MUCHMORE, model.MOST},
+		"raids":        {model.NONE, model.MUCH_LESS, model.LESS, model.MORE, model.MUCHMORE},
+		"portals":      {model.CASUAL, model.HARD, model.VERY_HARD},
 	}
 
 	for _, modifier := range c.Modifiers {
-		validValues, exists := validModifiers[modifier.ModifierKey]
+		validValues, exists := validModifiers[modifier.Key]
 		if !exists {
-			return fmt.Errorf("invalid modifier key: \"%s\"", modifier.ModifierKey)
+			return fmt.Errorf("invalid modifier key: \"%s\"", modifier.Key)
 		}
 
 		for _, validValue := range validValues {
-			if modifier.ModifierValue == validValue {
+			if modifier.Value == validValue {
 				return nil // Valid value found
 			}
 		}
 
-		return fmt.Errorf("invalid value for modifier \"%s\": \"%s\" valid values are: \"%v\"", modifier.ModifierKey, modifier.ModifierValue, validModifiers[modifier.ModifierKey])
+		return fmt.Errorf("invalid value for modifier \"%s\": \"%s\" valid values are: \"%v\"", modifier.Key, modifier.Value, validModifiers[modifier.Key])
 	}
 
 	return nil
-}
-
-type CreateServerResponse struct {
-	ServerIp       string     `json:"server_ip"`
-	ServerPort     int        `json:"server_port"`
-	ServerMemory   int        `json:"server_memory"`
-	ServerCpu      int        `json:"server_cpu"`
-	CpuLimit       int        `json:"cpu_limit"`
-	MemoryLimit    int        `json:"memory_limit"`
-	WorldDetails   cfg.Config `json:"world_details"`
-	PvcName        string     `json:"mod_pvc_name"`
-	DeploymentName string     `json:"deployment_name"`
-	State          string     `json:"state"`
 }
 
 type CreateServerHandler struct{}
@@ -161,7 +147,7 @@ type CreateServerHandler struct{}
 // responsible for creating the initial deployment and pvc which in turn creates the replicaset and pod for the src.
 // Future src management like mod installation, user termination requests, custom world uploads, etc... will use
 // the /api/v1/src/scale route to scale the replicas to 0-1 without removing the deployment or PVC.
-func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService service.KubernetesService, cognito service.CognitoService, stripeService *service.StripeService, ctx context.Context) {
+func (h *CreateServerHandler) HandleRequest(c *gin.Context, ctx context.Context, w *service.Wrapper) {
 	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
@@ -188,32 +174,19 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService service.
 		return
 	}
 
-	user := tmp.(*service.CognitoUser)
-
-	// Verify that src details is "nil". This avoids a scenario where a
-	// user could create more than 1 src.
-	attributes, err := cognito.GetUserAttributes(ctx, &user.Credentials.AccessToken)
-	serverDetails := util.GetAttribute(attributes, "custom:server_details")
-	res := CreateServerResponse{}
-	if err != nil {
-		log.Errorf("could not get user attributes: %v", err)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("could not get user attributes: %s", err)})
+	user := tmp.(*model.User)
+	if len(user.Servers) > 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "server already exists for user"})
 		return
 	}
 
-	// If src is nil it's the first time the user is booting up.
-	if serverDetails != "nil" {
-		json.Unmarshal([]byte(serverDetails), &res)
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("server: %s already exists for user: %s", res.DeploymentName, user.Email)})
-		return
-	}
-
-	limits, err := stripeService.GetSubscriptionLimits(user.SubscriptionId)
+	limits, err := w.StripeService.GetSubscriptionLimits(user.SubscriptionId)
 	if err != nil {
 		log.Errorf("failed to get user subscription limits: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get subscription limit: %v", err)})
 		return
 	}
+
 	user.SubscriptionLimits = *limits
 
 	if *reqBody.BackupCount > user.SubscriptionLimits.MaxBackups {
@@ -221,26 +194,19 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService service.
 		log.Infof("request max backups > users subscription limit: %d, new backup count set to limit: %d", user.SubscriptionLimits.MaxBackups, *reqBody.BackupCount)
 	}
 
-	config := MakeConfigWithDefaults(&reqBody)
-	valheimServer, err := CreateDedicatedServerDeployment(config, kubeService, user)
+	world := MakeWorldWithDefaults(&reqBody)
+	valheimServer, err := CreateDedicatedServerDeployment(world, w.KubeService, user)
 	if err != nil {
 		log.Errorf("could not create dedicated src deployment: %s", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create dedicated src deployment: " + err.Error()})
 		return
 	}
 
-	serverData, err := json.Marshal(valheimServer)
-	if err != nil {
-		log.Errorf("failed to marshall src data to json: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to marshall src data to json: %s", err.Error())})
-		return
-	}
-
-	attr := util.MakeAttribute("custom:server_details", string(serverData))
-	err = cognito.UpdateUserAttributes(ctx, &user.Credentials.AccessToken, []types.AttributeType{attr})
-	if err != nil {
-		log.Errorf("failed to update src details in cognito user attribute: %v", err)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("failed to update src details in cognito user attribute: %v", err)})
+	user.Servers = append(user.Servers, *valheimServer)
+	tx := w.HearthhubDb.Save(user)
+	if tx.Error != nil {
+		log.Errorf("could not update user with server details: %s", tx.Error)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not update user with server details: " + tx.Error.Error()})
 		return
 	}
 
@@ -248,16 +214,16 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, kubeService service.
 }
 
 // CreateDedicatedServerDeployment Creates the valheim dedicated src deployment and pvc given the src configuration.
-func CreateDedicatedServerDeployment(config *cfg.Config, kubeService service.KubernetesService, user *service.CognitoUser) (*CreateServerResponse, error) {
-	serverArgs := config.ToStringArgs()
-	serverPort, _ := strconv.Atoi(config.Port)
+func CreateDedicatedServerDeployment(world *model.WorldDetails, kubeService service.KubernetesService, user *model.User) (*model.Server, error) {
+	serverArgs := world.ToStringArgs()
+	serverPort, _ := strconv.Atoi(world.Port)
 
 	// Deployments & PVC are always tied to the discord ID. When a src is terminated and re-created it
 	// will be made with a different pod name but the same deployment name making for easy replica scaling.
 	pvcName := fmt.Sprintf("valheim-pvc-%s", user.DiscordID)
 	deploymentName := fmt.Sprintf("valheim-%s", user.DiscordID)
 
-	log.Infof("server requests/limits: cpu=%d mem=%d, server args: %v", config.CpuRequest, config.MemoryRequest, serverArgs)
+	log.Infof("server requests/limits: cpu=%d mem=%d, server args: %v", world.CPURequests, world.MemoryRequests, serverArgs)
 	labels := map[string]string{
 		"app":               "valheim",
 		"created-by":        deploymentName,
@@ -313,12 +279,12 @@ func CreateDedicatedServerDeployment(config *cfg.Config, kubeService service.Kub
 							},
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse(strconv.Itoa(config.CpuRequest)),
-									corev1.ResourceMemory: resource.MustParse(strconv.Itoa(config.MemoryRequest) + "Gi"),
+									corev1.ResourceCPU:    resource.MustParse(strconv.Itoa(world.CPURequests)),
+									corev1.ResourceMemory: resource.MustParse(strconv.Itoa(world.MemoryRequests) + "Gi"),
 								},
 								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse(strconv.Itoa(config.CpuRequest)),
-									corev1.ResourceMemory: resource.MustParse(strconv.Itoa(config.MemoryRequest) + "Gi"),
+									corev1.ResourceCPU:    resource.MustParse(strconv.Itoa(world.CPURequests)),
+									corev1.ResourceMemory: resource.MustParse(strconv.Itoa(world.MemoryRequests) + "Gi"),
 								},
 							},
 							VolumeMounts: util.MakeVolumeMounts(),
@@ -450,18 +416,18 @@ func CreateDedicatedServerDeployment(config *cfg.Config, kubeService service.Kub
 	// Rm the instance id from the response it's not useful for users and makes
 	// testing harder since it generates a pseudo-random alphanumeric string with
 	// each invocation
-	config.InstanceId = ""
-	return &CreateServerResponse{
-		ServerIp:       ip,
+	world.InstanceID = ""
+	return &model.Server{
+		ServerIP:       ip,
 		ServerPort:     serverPort,
-		ServerCpu:      config.CpuRequest,
-		ServerMemory:   config.MemoryRequest,
-		CpuLimit:       cpuLimit,
+		ServerCPU:      world.CPURequests,
+		ServerMemory:   world.MemoryRequests,
+		CPULimit:       cpuLimit,
 		MemoryLimit:    memLimit,
-		WorldDetails:   *config,
-		PvcName:        names[0],
+		WorldDetails:   *world,
+		PVCName:        names[0],
 		DeploymentName: names[1],
-		State:          cfg.RUNNING,
+		State:          model.RUNNING,
 	}, nil
 }
 

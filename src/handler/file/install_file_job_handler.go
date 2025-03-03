@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/cbartram/hearthhub-mod-api/src/model"
 	"github.com/cbartram/hearthhub-mod-api/src/service"
 	"github.com/cbartram/hearthhub-mod-api/src/util"
 	"github.com/gin-gonic/gin"
@@ -96,7 +97,7 @@ func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService service.K
 		log.Errorf("user not found in context")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found in context"})
 	}
-	user := tmp.(*service.CognitoUser)
+	user := tmp.(*model.User)
 
 	if reqBody.S3Delete {
 		log.Infof("removing files with prefix: %s from S3", *reqBody.Prefix)
@@ -152,7 +153,7 @@ func (h *InstallFileHandler) HandleRequest(c *gin.Context, kubeService service.K
 
 // CreateFileJob Creates a new kubernetes job which attaches the valheim src PVC, downloads mods from S3,
 // and installs mods onto the PVC before restarting the Valheim src.
-func CreateFileJob(clientset kubernetes.Interface, payload *FilePayload, user *service.CognitoUser) (*string, error) {
+func CreateFileJob(clientset kubernetes.Interface, payload *FilePayload, user *model.User) (*string, error) {
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: fmt.Sprintf("mod-install-%s-", user.DiscordID),

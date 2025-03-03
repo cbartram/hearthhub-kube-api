@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
+	"github.com/cbartram/hearthhub-mod-api/src/model"
 	"github.com/cbartram/hearthhub-mod-api/src/service"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -24,7 +25,7 @@ func (d *DeleteServerHandler) HandleRequest(c *gin.Context, kubeService service.
 		return
 	}
 
-	user := tmp.(*service.CognitoUser)
+	user := tmp.(*model.User)
 
 	// Add simple deployment and pvc actions which have already been applied so we can re-use the same logic
 	// to roll them back i.e. delete them!

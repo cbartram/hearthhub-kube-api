@@ -3,10 +3,8 @@ package server
 import (
 	"context"
 	"fmt"
-	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
-	"github.com/cbartram/hearthhub-mod-api/src/cfg"
+	"github.com/cbartram/hearthhub-mod-api/src/model"
 	"github.com/cbartram/hearthhub-mod-api/src/service"
-	"github.com/cbartram/hearthhub-mod-api/src/util"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -21,7 +19,7 @@ type ScaleServerRequest struct {
 
 type ScaleServerHandler struct{}
 
-func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService service.KubernetesService, cognito service.CognitoService, ctx context.Context) {
+func (h *ScaleServerHandler) HandleRequest(c *gin.Context, w *service.Wrapper) {
 	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
@@ -52,91 +50,70 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, kubeService service.K
 		return
 	}
 
-	user := tmp.(*service.CognitoUser)
+	user := tmp.(*model.User)
 
 	// Verify that src details is "nil". This avoids a scenario where a
 	// user could create more than 1 src.
-	attributes, err := cognito.GetUserAttributes(ctx, &user.Credentials.AccessToken)
-	serverJson := util.GetAttribute(attributes, "custom:server_details")
-	server := CreateServerResponse{}
-
-	if err != nil {
-		log.Errorf("could not get user attributes: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("could not get user attributes: %s", err)})
+	if len(user.Servers) == 0 {
+		log.Errorf("user: %s has no server to scale", user.DiscordID)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no server to scale."})
 		return
 	}
 
-	if serverJson == "nil" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "valheim server does not exist. nothing to scale."})
-		return
-	}
+	// TODO Currently only 1 server is supported per user. If more in the future then this needs updated
+	server := user.Servers[0]
 
-	json.Unmarshal([]byte(serverJson), &server)
-
-	if server.State == cfg.RUNNING && *reqBody.Replicas == 1 {
+	if server.State == model.RUNNING && *reqBody.Replicas == 1 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "server already running. replicas must be 0 when server state is: RUNNING"})
 		return
 	}
 
-	if server.State == cfg.TERMINATED && *reqBody.Replicas == 0 {
+	if server.State == model.TERMINATED && *reqBody.Replicas == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "no server to terminate. replicas must be 1 when server state is: TERMINATED"})
 		return
 	}
 
 	// Scale down the deployment
 	deploymentName := fmt.Sprintf("valheim-%s", user.DiscordID)
-
-	err = UpdateServerArgs(kubeService, deploymentName, &server)
+	err = UpdateServerArgs(w.KubeService, deploymentName, &server)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to update deployment args: %v", err)})
 		return
 	}
 
-	scale, err := kubeService.GetClient().AppsV1().Deployments("hearthhub").GetScale(context.TODO(), deploymentName, metav1.GetOptions{})
+	scale, err := w.KubeService.GetClient().AppsV1().Deployments("hearthhub").GetScale(context.TODO(), deploymentName, metav1.GetOptions{})
 	if err != nil {
-		// TODO If deployment doesn't exist we are in a bad state and need to set cognito custom:server_details to "nil"
 		log.Errorf("failed to get deployment scale from kubernetes api: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get deployment scale from kubernetes api: %v", err)})
 		return
 	}
 
 	scale.Spec.Replicas = *reqBody.Replicas
-	_, err = kubeService.GetClient().AppsV1().Deployments("hearthhub").UpdateScale(context.TODO(), deploymentName, scale, metav1.UpdateOptions{})
+	_, err = w.KubeService.GetClient().AppsV1().Deployments("hearthhub").UpdateScale(context.TODO(), deploymentName, scale, metav1.UpdateOptions{})
 	if err != nil {
 		log.Errorf("failed to update deployment scale: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to update deployment scale: %v", err)})
 		return
 	}
 
-	state := cfg.TERMINATED
+	state := model.TERMINATED
 	if *reqBody.Replicas == 1 {
-		state = cfg.RUNNING
+		state = model.RUNNING
 	}
-	s, err := UpdateServerDetails(ctx, cognito, &server, user, state)
-	if err != nil {
-		log.Errorf("could not update user attributes: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("could not update user attributes: %s", err)})
+	server.State = state
+	tx := w.HearthhubDb.Save(server)
+	if tx.Error != nil {
+		log.Errorf("could not update server state: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("could not update server state: %s", err)})
 		return
 	}
 
-	c.JSON(http.StatusOK, s)
-}
-
-// UpdateServerDetails Updates the custom:server_details field in Cognito with the information from the scaled src.
-func UpdateServerDetails(ctx context.Context, cognito service.CognitoService, res *CreateServerResponse, user *service.CognitoUser, state string) (*CreateServerResponse, error) {
-	res.State = state
-	s, _ := json.Marshal(res)
-	serverAttribute := util.MakeAttribute("custom:server_details", string(s))
-	err := cognito.UpdateUserAttributes(ctx, &user.Credentials.AccessToken, []types.AttributeType{serverAttribute})
-	if err != nil {
-		return nil, err
-	}
-	return res, nil
+	c.JSON(http.StatusOK, server)
 }
 
 // UpdateServerArgs Update's a deployment's args to reflect what is in Cognito. This avoids complex argument merging logic by simply having the frontend
 // update cognito with the new src args.
-func UpdateServerArgs(kubeService service.KubernetesService, deploymentName string, server *CreateServerResponse) error {
+func UpdateServerArgs(kubeService service.KubernetesService, deploymentName string, server *model.Server) error {
 	deployment, err := kubeService.GetClient().AppsV1().Deployments("hearthhub").Get(context.TODO(), deploymentName, metav1.GetOptions{})
 	if err != nil {
 		log.Errorf("error getting deployment: %v", err)

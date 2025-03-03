@@ -2,6 +2,7 @@ package cognito
 
 import (
 	"context"
+	"github.com/cbartram/hearthhub-mod-api/src/model"
 	"github.com/cbartram/hearthhub-mod-api/src/service"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -36,7 +37,7 @@ func (h *AuthHandler) HandleRequest(c *gin.Context, ctx context.Context, wrapper
 		return
 	}
 
-	user := tmp.(*service.CognitoUser)
+	user := tmp.(*model.User)
 
 	resource, ok := c.GetQuery("resource")
 	if !ok {
@@ -53,7 +54,7 @@ func (h *AuthHandler) HandleRequest(c *gin.Context, ctx context.Context, wrapper
 	}
 
 	log.Infof("authenticating user with discord id: %s", user.DiscordID)
-	cognitoUser, err := wrapper.CognitoService.AuthUser(ctx, &user.Credentials.RefreshToken, &user.DiscordID, wrapper.HearthhubDb)
+	user, err := wrapper.CognitoService.AuthUser(ctx, &user.Credentials.RefreshToken, &user.DiscordID, wrapper.HearthhubDb)
 	if err != nil {
 		log.Errorf("user is unauthorized: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{
@@ -65,11 +66,11 @@ func (h *AuthHandler) HandleRequest(c *gin.Context, ctx context.Context, wrapper
 	// The user does not need stripe sub to access the resource
 	if authorizationValue == CognitoAuth || authorizationValue == NoAuth {
 		log.Infof("user auth ok, no stripe sub required for resource: %s", resource)
-		c.JSON(http.StatusOK, cognitoUser)
+		c.JSON(http.StatusOK, user)
 		return
 	}
 
-	if len(cognitoUser.SubscriptionId) == 0 {
+	if len(user.SubscriptionId) == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error": "user has no subscription, id is blank",
 		})
@@ -77,7 +78,7 @@ func (h *AuthHandler) HandleRequest(c *gin.Context, ctx context.Context, wrapper
 	}
 
 	// Else we know it requires both cognito and stripe so proceed to verify stripe
-	status, ok, err := wrapper.StripeService.VerifyActiveSubscription(cognitoUser.CustomerId, cognitoUser.SubscriptionId)
+	status, ok, err := wrapper.StripeService.VerifyActiveSubscription(user.CustomerId, user.SubscriptionId)
 	if err != nil {
 		log.Errorf("unable to verify stripe subscription status: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{
@@ -94,16 +95,17 @@ func (h *AuthHandler) HandleRequest(c *gin.Context, ctx context.Context, wrapper
 		return
 	}
 
-	limits, err := wrapper.StripeService.GetSubscriptionLimits(cognitoUser.SubscriptionId)
+	limits, err := wrapper.StripeService.GetSubscriptionLimits(user.SubscriptionId)
 	if err != nil {
-		log.Errorf("failed to get sub limits for sub id: %s, error: %v", cognitoUser.SubscriptionId, err)
+		log.Errorf("failed to get sub limits for sub id: %s, error: %v", user.SubscriptionId, err)
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error": "failed to parse subscription limits",
 		})
 		return
 	}
 
-	cognitoUser.SubscriptionLimits = *limits
+	user.SubscriptionLimits = *limits
+	user.SubscriptionStatus = status
 	log.Infof("user auth ok -- stripe sub verified: %s, for resource: %s", status, resource)
-	c.JSON(http.StatusOK, cognitoUser)
+	c.JSON(http.StatusOK, user)
 }

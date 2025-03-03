@@ -69,12 +69,14 @@ func (h *CreateUserRequestHandler) HandleRequest(c *gin.Context, ctx context.Con
 		}
 
 		newUser := model.User{
-			DiscordUsername: reqBody.DiscordUsername,
-			Email:           reqBody.DiscordEmail,
-			DiscordID:       reqBody.DiscordID,
-			AvatarId:        reqBody.AvatarId,
-			CustomerId:      cust.ID,
-			SubscriptionId:  "",
+			DiscordUsername:    reqBody.DiscordUsername,
+			Email:              reqBody.DiscordEmail,
+			DiscordID:          reqBody.DiscordID,
+			AvatarId:           reqBody.AvatarId,
+			CustomerId:         cust.ID,
+			SubscriptionId:     "",
+			SubscriptionStatus: string(stripe.SubscriptionStatusUnpaid),
+			SubscriptionLimits: model.SubscriptionLimits{},
 			Credentials: model.CognitoCredentials{
 				RefreshToken:    *creds.RefreshToken,
 				AccessToken:     *creds.AccessToken,

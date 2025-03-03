@@ -3,6 +3,7 @@ package file
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/cbartram/hearthhub-mod-api/src/model"
 	"github.com/cbartram/hearthhub-mod-api/src/service"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -48,7 +49,7 @@ func (u *UploadFileHandler) HandleRequest(c *gin.Context, s3Client *service.S3Se
 		return
 	}
 
-	user := tmp.(*service.CognitoUser)
+	user := tmp.(*model.User)
 	limits, err := stripeService.GetSubscriptionLimits(user.SubscriptionId)
 	if err != nil {
 		log.Errorf("failed to get user subscription limits: %v", err)

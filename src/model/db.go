@@ -5,9 +5,39 @@ import (
 	log "github.com/sirupsen/logrus"
 	"gorm.io/driver/mysql"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
+)
+
+const (
+	//Combat: veryeasy, easy, hard, veryhard
+	//DeathPenalty: casual, veryeasy, easy, hard, hardcore
+	//Resources: muchless, less, more, muchmore, most
+	//Raids: none, muchless, less, more, muchmore
+	//Portals: casual, hard, veryhard
+
+	// Difficulties & Death penalties
+	VERY_EASY = "veryeasy"
+	EASY      = "easy"
+	HARD      = "hard"     // only valid for portals
+	VERY_HARD = "veryhard" // combat only & only valid for portals
+	CASUAL    = "casual"   // only valid for portals
+	HARDCORE  = "hardcore" // deathpenalty only
+
+	// Resources & Raids
+	NONE      = "none" // Raid only
+	MUCH_LESS = "muchless"
+	LESS      = "less"
+	MORE      = "more"
+	MUCHMORE  = "muchmore"
+	MOST      = "most" // resource only
+
+	// Server states
+	RUNNING    = "running"
+	TERMINATED = "terminated"
 )
 
 func Connect() *gorm.DB {
@@ -75,9 +105,9 @@ func (Modifier) TableName() string {
 // WorldDetails represents the nested JSON structure for server world configuration
 type WorldDetails struct {
 	ID                    uint           `gorm:"primaryKey" json:"id"`
-	Name                  string         `gorm:"column:name;not null" json:"name"`
+	Name                  string         `gorm:"column:name;not null" json:"name"` // The name of the server
 	ServerID              uint           `gorm:"column:server_id;index;not null" json:"server_id"`
-	World                 string         `gorm:"column:world;not null" json:"world"`
+	World                 string         `gorm:"column:world;not null" json:"world"` // The name of the world
 	CPURequests           int            `gorm:"column:cpu_requests;not null;default:1" json:"cpu_requests"`
 	MemoryRequests        int            `gorm:"column:memory_requests;not null;default:1024" json:"memory_requests"`
 	Port                  string         `gorm:"column:port;not null" json:"port"`
@@ -97,6 +127,31 @@ type WorldDetails struct {
 	Modifiers []Modifier `gorm:"foreignKey:WorldID" json:"modifiers,omitempty"`
 }
 
+func (c WorldDetails) ToStringArgs() string {
+	var sb strings.Builder
+	args := fmt.Sprintf("/valheim/valheim_server.x86_64 -name %s -port %s -world %s -password %s -instanceid %s -backups %s -backupshort %s -backuplong %s ",
+		c.Name, c.Port, c.World, c.Password, c.InstanceID, strconv.Itoa(c.BackupCount), strconv.Itoa(c.InitialBackupSeconds), strconv.Itoa(c.BackupIntervalSeconds))
+
+	if c.EnableCrossplay {
+		sb.WriteString("-crossplay ")
+	}
+
+	if c.Public {
+		sb.WriteString("-public 1 ")
+	} else {
+		sb.WriteString("-public 0 ")
+	}
+
+	for _, modifier := range c.Modifiers {
+		sb.WriteString(fmt.Sprintf("-modifier %s %s ", modifier.Key, modifier.Value))
+	}
+
+	// Write the logs to a shared mount on the pvc so that the sidecar can tail these looking
+	// for the join code.
+	sb.WriteString("-logFile /valheim/BepInEx/config/server-logs.txt")
+	return args + sb.String()
+}
+
 func (WorldDetails) TableName() string {
 	return "world_details"
 }
@@ -111,6 +166,7 @@ type User struct {
 	CustomerId         string             `gorm:"column:customer_id" json:"customerId,omitempty"`
 	SubscriptionId     string             `gorm:"column:subscription_id" json:"subscriptionId"`
 	SubscriptionLimits SubscriptionLimits `gorm:"-" json:"subscriptionLimits,omitempty"`
+	SubscriptionStatus string             `gorm:"-" json:"subscriptionStatus,omitempty"`
 	Credentials        CognitoCredentials `gorm:"-" json:"credentials,omitempty"`
 	CreatedAt          time.Time          `json:"created_at"`
 	UpdatedAt          time.Time          `json:"updated_at"`
@@ -130,7 +186,7 @@ func GetUser(discordId string, db *gorm.DB) (*User, error) {
 		Select("*").
 		Where("discord_id = ?", discordId).
 		Joins("LEFT JOIN servers ON servers.user_id = users.id").
-		Joins("LEFT JOIN mod_files ON mods_files.user_id = users.id").
+		Joins("LEFT JOIN mod_files ON mod_files.user_id = users.id").
 		Joins("LEFT JOIN config_files ON config_files.user_id = users.id").
 		Joins("LEFT JOIN backup_files ON backup_files.user_id = users.id").
 		Joins("LEFT JOIN world_files ON world_files.user_id = users.id").
@@ -157,7 +213,7 @@ type Server struct {
 	ServerCPU      int            `gorm:"column:server_cpu" json:"server_cpu"`
 	CPULimit       int            `gorm:"column:cpu_limit" json:"cpu_limit"`
 	MemoryLimit    int            `gorm:"column:memory_limit" json:"memory_limit"`
-	ModPVCName     string         `gorm:"column:mod_pvc_name" json:"mod_pvc_name"`
+	PVCName        string         `gorm:"column:pvc_name" json:"pvc_name"`
 	DeploymentName string         `gorm:"column:deployment_name" json:"deployment_name"`
 	State          string         `gorm:"column:state" json:"state"`
 	CreatedAt      time.Time      `json:"created_at"`
@@ -186,7 +242,7 @@ type BaseFile struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 
 	// Relations
-	User User `gorm:"foreignKey:UserID" json:"-"`
+	User User `gorm:"foreignKey:UserID;references:ID" json:"-"`
 }
 
 // BackupFile represents a server backup file

@@ -3,6 +3,7 @@ package cognito
 import (
 	"context"
 	"fmt"
+	"github.com/cbartram/hearthhub-mod-api/src/model"
 	"github.com/cbartram/hearthhub-mod-api/src/service"
 
 	"github.com/gin-gonic/gin"
@@ -22,7 +23,7 @@ func (h *RefreshSessionHandler) HandleRequest(c *gin.Context, ctx context.Contex
 		return
 	}
 
-	user := tmp.(*service.CognitoUser)
+	user := tmp.(*model.User)
 
 	log.Infof("authenticating user with discord id: %s", user.DiscordID)
 	creds, err := cognitoService.RefreshSession(ctx, user.Credentials.RefreshToken)

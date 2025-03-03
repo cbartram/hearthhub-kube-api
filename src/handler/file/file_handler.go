@@ -2,6 +2,7 @@ package file
 
 import (
 	"fmt"
+	"github.com/cbartram/hearthhub-mod-api/src/model"
 	"github.com/cbartram/hearthhub-mod-api/src/service"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -27,7 +28,7 @@ func (f *FileHandler) HandleRequest(c *gin.Context, s3Client *service.S3Service)
 		return
 	}
 
-	user := tmp.(*service.CognitoUser)
+	user := tmp.(*model.User)
 
 	res, err := ListAllObjects(s3Client, user.DiscordID)
 	if err != nil {
