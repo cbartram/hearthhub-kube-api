@@ -10,24 +10,13 @@ import (
 	"github.com/cbartram/hearthhub-mod-api/src/service"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
-	"gorm.io/gorm"
 	"log"
 	"net/http"
 	"os"
 )
 
-type ServiceWrapper struct {
-	DiscordService  *service.DiscordService
-	S3Service       *service.S3Service
-	StripeService   *service.StripeService
-	CognitoService  service.CognitoService
-	KubeService     service.KubernetesService
-	RabbitMQService *service.RabbitMqService
-	HearthhubDb     *gorm.DB
-}
-
 // NewRouter Create a new gin router and instantiates the routes and route handlers for the entire API.
-func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebSocketManager) {
+func NewRouter(ctx context.Context, wrapper *service.Wrapper) (*gin.Engine, *WebSocketManager) {
 	logger := logrus.New()
 	fmt := &logrus.TextFormatter{
 		FullTimestamp: false,
@@ -53,8 +42,8 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 
 	r.Use(CORSMiddleware(), LogrusMiddleware(logger))
 	apiGroup := r.Group("/api/v1")
-	serverGroup := apiGroup.Group("/server", CORSMiddleware(), AuthMiddleware(wrapper.CognitoService))
-	modGroup := apiGroup.Group("/file", CORSMiddleware(), AuthMiddleware(wrapper.CognitoService))
+	serverGroup := apiGroup.Group("/server", CORSMiddleware(), AuthMiddleware(wrapper.CognitoService, wrapper.HearthhubDb))
+	modGroup := apiGroup.Group("/file", CORSMiddleware(), AuthMiddleware(wrapper.CognitoService, wrapper.HearthhubDb))
 	cognitoGroup := apiGroup.Group("/cognito", CORSMiddleware())
 
 	// The connection to RabbitMQ and exchange declaration occurs here.
@@ -73,12 +62,12 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 		wsManager.HandleWebSocket(c)
 	})
 
-	apiGroup.GET("/stripe/create-checkout-session", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
+	apiGroup.GET("/stripe/create-checkout-session", AuthMiddleware(wrapper.CognitoService, wrapper.HearthhubDb), func(c *gin.Context) {
 		h := stripe_handlers.CheckoutSessionHandler{}
 		h.HandleRequest(c, wrapper.CognitoService)
 	})
 
-	apiGroup.GET("/stripe/create-billing-session", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
+	apiGroup.GET("/stripe/create-billing-session", AuthMiddleware(wrapper.CognitoService, wrapper.HearthhubDb), func(c *gin.Context) {
 		h := stripe_handlers.BillingSessionHandler{}
 		h.HandleRequest(c)
 	})
@@ -88,7 +77,7 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 		h.HandleRequest(c, wrapper.RabbitMQService)
 	})
 
-	apiGroup.GET("/stripe/subscription", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
+	apiGroup.GET("/stripe/subscription", AuthMiddleware(wrapper.CognitoService, wrapper.HearthhubDb), func(c *gin.Context) {
 		h := stripe_handlers.GetSubscriptionHandler{}
 		h.HandleRequest(c)
 	})
@@ -117,22 +106,22 @@ func NewRouter(ctx context.Context, wrapper *ServiceWrapper) (*gin.Engine, *WebS
 	})
 
 	//  Authorized routes below
-	apiGroup.GET("/file", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
+	apiGroup.GET("/file", AuthMiddleware(wrapper.CognitoService, wrapper.HearthhubDb), func(c *gin.Context) {
 		h := file.FileHandler{}
 		h.HandleRequest(c, wrapper.S3Service)
 	})
 
-	apiGroup.POST("/file/generate-signed-url", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
+	apiGroup.POST("/file/generate-signed-url", AuthMiddleware(wrapper.CognitoService, wrapper.HearthhubDb), func(c *gin.Context) {
 		h := file.UploadFileHandler{}
 		h.HandleRequest(c, wrapper.S3Service, wrapper.StripeService)
 	})
 
-	cognitoGroup.POST("/auth", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
+	cognitoGroup.POST("/auth", AuthMiddleware(wrapper.CognitoService, wrapper.HearthhubDb), func(c *gin.Context) {
 		h := cognito.AuthHandler{}
-		h.HandleRequest(c, ctx, wrapper.CognitoService, wrapper.StripeService)
+		h.HandleRequest(c, ctx, wrapper)
 	})
 
-	cognitoGroup.POST("/refresh-session", AuthMiddleware(wrapper.CognitoService), func(c *gin.Context) {
+	cognitoGroup.POST("/refresh-session", AuthMiddleware(wrapper.CognitoService, wrapper.HearthhubDb), func(c *gin.Context) {
 		h := cognito.RefreshSessionHandler{}
 		h.HandleRequest(c, ctx, wrapper.CognitoService)
 	})

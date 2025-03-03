@@ -1,9 +1,6 @@
 package model
 
 import (
-	"database/sql/driver"
-	"encoding/json"
-	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/driver/mysql"
@@ -31,6 +28,8 @@ func Connect() *gorm.DB {
 		&ConfigFile{},
 		&ModFile{},
 		&WorldFile{},
+		&WorldDetails{},
+		&Modifier{},
 	)
 
 	if err != nil {
@@ -40,39 +39,16 @@ func Connect() *gorm.DB {
 	return db
 }
 
-// WorldDetails represents the nested JSON structure for server world configuration
-type WorldDetails struct {
-	Name                  string   `json:"name"`
-	World                 string   `json:"world"`
-	CPURequests           int      `json:"cpu_requests"`
-	MemoryRequests        int      `json:"memory_requests"`
-	Port                  string   `json:"port"`
-	Password              string   `json:"password"`
-	EnableCrossplay       bool     `json:"enable_crossplay"`
-	Public                bool     `json:"public"`
-	InstanceID            string   `json:"instance_id"`
-	Modifiers             []string `json:"modifiers"`
-	SaveIntervalSeconds   int      `json:"save_interval_seconds"`
-	BackupCount           int      `json:"backup_count"`
-	InitialBackupSeconds  int      `json:"initial_backup_seconds"`
-	BackupIntervalSeconds int      `json:"backup_interval_seconds"`
+// SubscriptionLimits stores user limits on their subscription's plan but is omitted from DB functions
+type SubscriptionLimits struct {
+	CpuLimit            int  `json:"cpuLimit"`
+	MemoryLimit         int  `json:"memoryLimit"`
+	MaxBackups          int  `json:"maxBackups"`
+	MaxWorlds           int  `json:"maxWorlds"`
+	ExistingWorldUpload bool `json:"existingWorldUpload"`
 }
 
-// Value implements the driver.Valuer interface for WorldDetails
-func (wd WorldDetails) Value() (driver.Value, error) {
-	return json.Marshal(wd)
-}
-
-// Scan implements the sql.Scanner interface for WorldDetails
-func (wd *WorldDetails) Scan(value interface{}) error {
-	bytes, ok := value.([]byte)
-	if !ok {
-		return errors.New("type assertion to []byte failed")
-	}
-	return json.Unmarshal(bytes, &wd)
-}
-
-// CognitoCredentials stores user authentication data
+// CognitoCredentials stores user authentication data from Cognito but is omitted from DB functions
 type CognitoCredentials struct {
 	RefreshToken    string `json:"refresh_token,omitempty"`
 	TokenExpiration int32  `json:"token_expiration_seconds,omitempty"`
@@ -80,33 +56,65 @@ type CognitoCredentials struct {
 	IdToken         string `json:"id_token,omitempty"`
 }
 
-// Value implements the driver.Valuer interface for CognitoCredentials
-func (cc CognitoCredentials) Value() (driver.Value, error) {
-	return json.Marshal(cc)
+// Modifier represents a game world modifier with key-value pairs
+type Modifier struct {
+	ID          uint           `gorm:"primaryKey" json:"id"`
+	WorldID     uint           `gorm:"column:world_id;index" json:"world_id"`
+	Key         string         `gorm:"column:key;index" json:"key"`
+	Value       string         `gorm:"column:value" json:"value"`
+	CreatedAt   time.Time      `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt   time.Time      `gorm:"column:updated_at" json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+	WorldDetail WorldDetails   `gorm:"foreignKey:WorldID;references:ID" json:"-"`
 }
 
-// Scan implements the sql.Scanner interface for CognitoCredentials
-func (cc *CognitoCredentials) Scan(value interface{}) error {
-	bytes, ok := value.([]byte)
-	if !ok {
-		return errors.New("type assertion to []byte failed")
-	}
-	return json.Unmarshal(bytes, &cc)
+func (Modifier) TableName() string {
+	return "modifiers"
+}
+
+// WorldDetails represents the nested JSON structure for server world configuration
+type WorldDetails struct {
+	ID                    uint           `gorm:"primaryKey" json:"id"`
+	Name                  string         `gorm:"column:name;not null" json:"name"`
+	ServerID              uint           `gorm:"column:server_id;index;not null" json:"server_id"`
+	World                 string         `gorm:"column:world;not null" json:"world"`
+	CPURequests           int            `gorm:"column:cpu_requests;not null;default:1" json:"cpu_requests"`
+	MemoryRequests        int            `gorm:"column:memory_requests;not null;default:1024" json:"memory_requests"`
+	Port                  string         `gorm:"column:port;not null" json:"port"`
+	Password              string         `gorm:"column:password" json:"password"`
+	EnableCrossplay       bool           `gorm:"column:enable_crossplay;default:false" json:"enable_crossplay"`
+	Public                bool           `gorm:"column:public;default:false" json:"public"`
+	InstanceID            string         `gorm:"column:instance_id" json:"instance_id"`
+	SaveIntervalSeconds   int            `gorm:"column:save_interval_seconds;default:300" json:"save_interval_seconds"`
+	BackupCount           int            `gorm:"column:backup_count;default:5" json:"backup_count"`
+	InitialBackupSeconds  int            `gorm:"column:initial_backup_seconds;default:300" json:"initial_backup_seconds"`
+	BackupIntervalSeconds int            `gorm:"column:backup_interval_seconds;default:3600" json:"backup_interval_seconds"`
+	CreatedAt             time.Time      `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt             time.Time      `gorm:"column:updated_at" json:"updated_at"`
+	DeletedAt             gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+
+	// Relations
+	Modifiers []Modifier `gorm:"foreignKey:WorldID" json:"modifiers,omitempty"`
+}
+
+func (WorldDetails) TableName() string {
+	return "world_details"
 }
 
 // User represents a user of the system
 type User struct {
-	ID              uint               `gorm:"primaryKey" json:"id"`
-	DiscordUsername string             `gorm:"column:discord_username" json:"discordUsername,omitempty"`
-	Email           string             `gorm:"column:email" json:"email,omitempty"`
-	AvatarId        string             `gorm:"column:avatar_id" json:"avatarId"`
-	DiscordID       string             `gorm:"column:discord_id;uniqueIndex" json:"discordId,omitempty"`
-	CustomerId      string             `gorm:"column:customer_id" json:"customerId,omitempty"`
-	SubscriptionId  string             `gorm:"column:subscription_id" json:"subscriptionId"`
-	Credentials     CognitoCredentials `gorm:"type:json" json:"credentials,omitempty"`
-	CreatedAt       time.Time          `json:"created_at"`
-	UpdatedAt       time.Time          `json:"updated_at"`
-	DeletedAt       gorm.DeletedAt     `gorm:"index" json:"deleted_at,omitempty"`
+	ID                 uint               `gorm:"primaryKey" json:"id"`
+	DiscordUsername    string             `gorm:"column:discord_username" json:"discordUsername,omitempty"`
+	Email              string             `gorm:"column:email" json:"email,omitempty"`
+	AvatarId           string             `gorm:"column:avatar_id" json:"avatarId"`
+	DiscordID          string             `gorm:"column:discord_id;uniqueIndex" json:"discordId,omitempty"`
+	CustomerId         string             `gorm:"column:customer_id" json:"customerId,omitempty"`
+	SubscriptionId     string             `gorm:"column:subscription_id" json:"subscriptionId"`
+	SubscriptionLimits SubscriptionLimits `gorm:"-" json:"subscriptionLimits,omitempty"`
+	Credentials        CognitoCredentials `gorm:"-" json:"credentials,omitempty"`
+	CreatedAt          time.Time          `json:"created_at"`
+	UpdatedAt          time.Time          `json:"updated_at"`
+	DeletedAt          gorm.DeletedAt     `gorm:"index" json:"deleted_at,omitempty"`
 
 	// Relations
 	Servers     []Server     `gorm:"foreignKey:UserID" json:"servers,omitempty"`
@@ -114,6 +122,25 @@ type User struct {
 	ConfigFiles []ConfigFile `gorm:"foreignKey:UserID" json:"config_files,omitempty"`
 	BackupFiles []BackupFile `gorm:"foreignKey:UserID" json:"backup_files,omitempty"`
 	WorldFiles  []WorldFile  `gorm:"foreignKey:UserID" json:"world_files,omitempty"`
+}
+
+func GetUser(discordId string, db *gorm.DB) (*User, error) {
+	var user User
+	tx := db.Model(&User{}).
+		Select("*").
+		Where("discord_id = ?", discordId).
+		Joins("LEFT JOIN servers ON servers.user_id = users.id").
+		Joins("LEFT JOIN mod_files ON mods_files.user_id = users.id").
+		Joins("LEFT JOIN config_files ON config_files.user_id = users.id").
+		Joins("LEFT JOIN backup_files ON backup_files.user_id = users.id").
+		Joins("LEFT JOIN world_files ON world_files.user_id = users.id").
+		First(&user)
+
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	return &user, nil
 }
 
 func (User) TableName() string {
@@ -130,7 +157,6 @@ type Server struct {
 	ServerCPU      int            `gorm:"column:server_cpu" json:"server_cpu"`
 	CPULimit       int            `gorm:"column:cpu_limit" json:"cpu_limit"`
 	MemoryLimit    int            `gorm:"column:memory_limit" json:"memory_limit"`
-	WorldDetails   WorldDetails   `gorm:"type:json" json:"world_details"`
 	ModPVCName     string         `gorm:"column:mod_pvc_name" json:"mod_pvc_name"`
 	DeploymentName string         `gorm:"column:deployment_name" json:"deployment_name"`
 	State          string         `gorm:"column:state" json:"state"`
@@ -139,8 +165,9 @@ type Server struct {
 	DeletedAt      gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 
 	// Relations
-	User       User        `gorm:"foreignKey:UserID" json:"-"`
-	WorldFiles []WorldFile `gorm:"foreignKey:ServerID" json:"world_files,omitempty"`
+	User         User         `gorm:"foreignKey:UserID" json:"-"`
+	WorldDetails WorldDetails `gorm:"foreignKey:ServerID;references:ID" json:"world_details"`
+	WorldFiles   []WorldFile  `gorm:"foreignKey:ServerID" json:"world_files,omitempty"`
 }
 
 func (Server) TableName() string {

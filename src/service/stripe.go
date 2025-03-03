@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"github.com/cbartram/hearthhub-mod-api/src/model"
 	log "github.com/sirupsen/logrus"
 	"github.com/stripe/stripe-go/v81"
 	"github.com/stripe/stripe-go/v81/productfeature"
@@ -12,14 +13,6 @@ import (
 )
 
 type StripeService struct{}
-
-type SubscriptionLimits struct {
-	CpuLimit            int  `json:"cpuLimit"`
-	MemoryLimit         int  `json:"memoryLimit"`
-	MaxBackups          int  `json:"maxBackups"`
-	MaxWorlds           int  `json:"maxWorlds"`
-	ExistingWorldUpload bool `json:"existingWorldUpload"`
-}
 
 func MakeStripeService() *StripeService {
 	apiKey := os.Getenv("STRIPE_SECRET_KEY")
@@ -45,7 +38,7 @@ func (s *StripeService) VerifyActiveSubscription(customerId string, subscription
 	return string(sub.Status), sub.Status == stripe.SubscriptionStatusActive || sub.Status == stripe.SubscriptionStatusTrialing, nil
 }
 
-func (s *StripeService) GetSubscriptionLimits(subscriptionId string) (*SubscriptionLimits, error) {
+func (s *StripeService) GetSubscriptionLimits(subscriptionId string) (*model.SubscriptionLimits, error) {
 	sub, err := subscription.Get(subscriptionId, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving subscription: %v", err)
@@ -55,7 +48,7 @@ func (s *StripeService) GetSubscriptionLimits(subscriptionId string) (*Subscript
 		return nil, fmt.Errorf("unexpected number of subscription items: %d", len(sub.Items.Data))
 	}
 
-	limits := SubscriptionLimits{
+	limits := model.SubscriptionLimits{
 		ExistingWorldUpload: false,
 	}
 	productId := sub.Items.Data[0].Price.Product.ID

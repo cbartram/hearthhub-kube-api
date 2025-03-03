@@ -72,7 +72,7 @@ func main() {
 		logrus.Errorf("failed to register stripe webhook message consumer: %v", err)
 	}
 
-	router, wsManager := src.NewRouter(context.Background(), &src.ServiceWrapper{
+	router, wsManager := src.NewRouter(context.Background(), &service.Wrapper{
 		DiscordService:  discordService,
 		S3Service:       s3Service,
 		CognitoService:  cognitoService,

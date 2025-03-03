@@ -28,7 +28,7 @@ var authorizationMap = map[string]AuthorizationLevel{
 
 // HandleRequest Authenticates that a refresh token is valid for a given user id. This returns the entire
 // user object with a refreshed access token.
-func (h *AuthHandler) HandleRequest(c *gin.Context, ctx context.Context, cognitoService service.CognitoService, stripeService *service.StripeService) {
+func (h *AuthHandler) HandleRequest(c *gin.Context, ctx context.Context, wrapper *service.Wrapper) {
 	tmp, exists := c.Get("user")
 	if !exists {
 		log.Errorf("user not found in context")
@@ -53,7 +53,7 @@ func (h *AuthHandler) HandleRequest(c *gin.Context, ctx context.Context, cognito
 	}
 
 	log.Infof("authenticating user with discord id: %s", user.DiscordID)
-	cognitoUser, err := cognitoService.AuthUser(ctx, &user.Credentials.RefreshToken, &user.DiscordID)
+	cognitoUser, err := wrapper.CognitoService.AuthUser(ctx, &user.Credentials.RefreshToken, &user.DiscordID, wrapper.HearthhubDb)
 	if err != nil {
 		log.Errorf("user is unauthorized: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{
@@ -77,7 +77,7 @@ func (h *AuthHandler) HandleRequest(c *gin.Context, ctx context.Context, cognito
 	}
 
 	// Else we know it requires both cognito and stripe so proceed to verify stripe
-	status, ok, err := stripeService.VerifyActiveSubscription(cognitoUser.CustomerId, cognitoUser.SubscriptionId)
+	status, ok, err := wrapper.StripeService.VerifyActiveSubscription(cognitoUser.CustomerId, cognitoUser.SubscriptionId)
 	if err != nil {
 		log.Errorf("unable to verify stripe subscription status: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{
@@ -94,7 +94,7 @@ func (h *AuthHandler) HandleRequest(c *gin.Context, ctx context.Context, cognito
 		return
 	}
 
-	limits, err := stripeService.GetSubscriptionLimits(cognitoUser.SubscriptionId)
+	limits, err := wrapper.StripeService.GetSubscriptionLimits(cognitoUser.SubscriptionId)
 	if err != nil {
 		log.Errorf("failed to get sub limits for sub id: %s, error: %v", cognitoUser.SubscriptionId, err)
 		c.JSON(http.StatusUnauthorized, gin.H{
