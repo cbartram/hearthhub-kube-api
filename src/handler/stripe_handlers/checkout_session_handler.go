@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
-	"github.com/cbartram/hearthhub-mod-api/src/model"
+	"github.com/cbartram/hearthhub-common/model"
 	"github.com/cbartram/hearthhub-mod-api/src/service"
 	"github.com/cbartram/hearthhub-mod-api/src/util"
 	"github.com/gin-gonic/gin"

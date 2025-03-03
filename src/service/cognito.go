@@ -7,7 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
-	"github.com/cbartram/hearthhub-mod-api/src/model"
+	"github.com/cbartram/hearthhub-common/model"
 	"github.com/cbartram/hearthhub-mod-api/src/util"
 	log "github.com/sirupsen/logrus"
 	"github.com/stripe/stripe-go/v81"

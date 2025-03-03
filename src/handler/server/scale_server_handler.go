@@ -3,7 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
-	"github.com/cbartram/hearthhub-mod-api/src/model"
+	"github.com/cbartram/hearthhub-common/model"
 	"github.com/cbartram/hearthhub-mod-api/src/service"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"

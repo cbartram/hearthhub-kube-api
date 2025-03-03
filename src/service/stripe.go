@@ -2,7 +2,7 @@ package service
 
 import (
 	"fmt"
-	"github.com/cbartram/hearthhub-mod-api/src/model"
+	"github.com/cbartram/hearthhub-common/model"
 	log "github.com/sirupsen/logrus"
 	"github.com/stripe/stripe-go/v81"
 	"github.com/stripe/stripe-go/v81/productfeature"
