@@ -31,11 +31,11 @@ image:
 
   # sidecar / backup manager
   backupManagerImageName: "cbartram/hearthhub-sidecar"
-  backupManagerImageVersion: "0.0.37"
+  backupManagerImageVersion: "0.0.39"
 
   # file manager / plugin manager
   fileManagerImageName: "cbartram/hearthhub-plugin-manager"
-  fileManagerImageVersion: "0.0.28"
+  fileManagerImageVersion: "0.0.29"
 
 serviceAccountName: hearthhub-api-sa
 
