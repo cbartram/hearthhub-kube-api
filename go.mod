@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.29.1
 	github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider v1.50.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.76.1
-	github.com/cbartram/hearthhub-common v0.0.0-20250304143236-5e91c4e03e39
+	github.com/cbartram/hearthhub-common v0.0.0-20250304170003-34e9da077982
 	github.com/gin-gonic/gin v1.10.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/joho/godotenv v1.5.1
