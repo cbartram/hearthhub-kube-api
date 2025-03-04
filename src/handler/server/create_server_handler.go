@@ -448,7 +448,7 @@ func CreateDedicatedServerDeployment(world *model.WorldDetails, kubeService serv
 		ServerMemory:   world.MemoryRequests,
 		CPULimit:       cpuLimit,
 		MemoryLimit:    memLimit,
-		WorldDetails:   world,
+		WorldDetails:   *world,
 		PVCName:        names[0],
 		DeploymentName: names[1],
 		State:          model.RUNNING,

@@ -40,8 +40,8 @@ github.com/bytedance/sonic v1.11.6 h1:oUp34TzMlL+OY1OUWxHqsdkgC/Zfc85zGqw9siXjrc
 github.com/bytedance/sonic v1.11.6/go.mod h1:LysEHSvpvDySVdC2f87zGWf6CIKJcAvqab1ZaiQtds4=
 github.com/bytedance/sonic/loader v0.1.1 h1:c+e5Pt1k/cy5wMveRDyk2X4B9hF4g7an8N3zCYjJFNM=
 github.com/bytedance/sonic/loader v0.1.1/go.mod h1:ncP89zfokxS5LZrJxl5z0UJcsk4M4yY2JpfqGeCtNLU=
-github.com/cbartram/hearthhub-common v0.0.0-20250304134015-52ac1aa4effc h1:AfgROnce94RIvE2U499FPbaJWHXvPgfFP6e4/9O+12Q=
-github.com/cbartram/hearthhub-common v0.0.0-20250304134015-52ac1aa4effc/go.mod h1:+WGdv9SCi6oX0wDXGBxTfr4UFDrtg2djo/5d0ues8rs=
+github.com/cbartram/hearthhub-common v0.0.0-20250304143236-5e91c4e03e39 h1:1GPs0dxZFp07J5Y3YbdqOgIDXfbxN4ZqkXQCgaSGucc=
+github.com/cbartram/hearthhub-common v0.0.0-20250304143236-5e91c4e03e39/go.mod h1:+WGdv9SCi6oX0wDXGBxTfr4UFDrtg2djo/5d0ues8rs=
 github.com/cloudwego/base64x v0.1.4 h1:jwCgWpFanWmN8xoIUHa2rtzmkd5J2plF/dnLS6Xd/0Y=
 github.com/cloudwego/base64x v0.1.4/go.mod h1:0zlkT4Wn5C6NdauXdJRhSKRlJvmclQ1hhJgA0rcu/8w=
 github.com/cloudwego/iasm v0.2.0 h1:1KNIy1I1H9hNNFEEH3DVnI4UujN+1zjpuk6gwHLTssg=

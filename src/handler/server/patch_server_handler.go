@@ -87,7 +87,7 @@ func (p *PatchServerHandler) HandleRequest(c *gin.Context, ctx context.Context, 
 	}
 
 	// Update our database with the newly patched server args
-	existingServer.WorldDetails = world
+	existingServer.WorldDetails = *world
 	tx := w.HearthhubDb.Save(existingServer)
 	if tx.Error != nil {
 		log.Errorf("could not save updated server details: %v", tx.Error)
