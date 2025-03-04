@@ -195,14 +195,30 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, ctx context.Context,
 	}
 
 	world := MakeWorldWithDefaults(&reqBody)
-	valheimServer, err := CreateDedicatedServerDeployment(world, w.KubeService, user)
+	server, err := CreateDedicatedServerDeployment(world, w.KubeService, user)
 	if err != nil {
-		log.Errorf("could not create dedicated src deployment: %s", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create dedicated src deployment: " + err.Error()})
+		log.Errorf("could not create dedicated server deployment: %s", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create dedicated server deployment: " + err.Error()})
 		return
 	}
 
-	user.Servers = append(user.Servers, *valheimServer)
+	serverTx := w.HearthhubDb.Create(server)
+	if serverTx.Error != nil {
+		log.Errorf("could not save server details: %s", serverTx.Error)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not save server details: " + serverTx.Error.Error()})
+		return
+	}
+
+	world.ServerID = server.ID
+
+	worldDetailsTx := w.HearthhubDb.Create(world)
+	if worldDetailsTx.Error != nil {
+		log.Errorf("could not save world details: %s", worldDetailsTx.Error)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not save world details: " + worldDetailsTx.Error.Error()})
+		return
+	}
+
+	user.Servers = []model.Server{*server}
 	tx := w.HearthhubDb.Save(user)
 	if tx.Error != nil {
 		log.Errorf("could not update user with server details: %s", tx.Error)
@@ -425,13 +441,14 @@ func CreateDedicatedServerDeployment(world *model.WorldDetails, kubeService serv
 	// each invocation
 	world.InstanceID = ""
 	return &model.Server{
+		Name:           world.Name,
 		ServerIP:       ip,
 		ServerPort:     serverPort,
 		ServerCPU:      world.CPURequests,
 		ServerMemory:   world.MemoryRequests,
 		CPULimit:       cpuLimit,
 		MemoryLimit:    memLimit,
-		WorldDetails:   *world,
+		WorldDetails:   world,
 		PVCName:        names[0],
 		DeploymentName: names[1],
 		State:          model.RUNNING,
