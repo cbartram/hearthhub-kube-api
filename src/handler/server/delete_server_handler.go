@@ -57,8 +57,6 @@ func (d *DeleteServerHandler) HandleRequest(c *gin.Context, w *service.Wrapper) 
 		return
 	}
 
-	w.HearthhubDb.Where("server_id = ?", server.ID).Delete(&model.WorldDetails{})
-
 	c.JSON(http.StatusOK, gin.H{
 		"message":   fmt.Sprintf("deleted resources successfully"),
 		"resources": names,

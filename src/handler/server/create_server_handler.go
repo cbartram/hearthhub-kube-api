@@ -209,6 +209,7 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, ctx context.Context,
 		return
 	}
 
+	server.UserID = user.ID
 	world.ServerID = server.ID
 
 	worldDetailsTx := w.HearthhubDb.Create(world)
