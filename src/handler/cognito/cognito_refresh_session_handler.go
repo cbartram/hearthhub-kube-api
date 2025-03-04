@@ -4,8 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/cbartram/hearthhub-common/model"
-	"github.com/cbartram/hearthhub-mod-api/src/service"
-
+	common "github.com/cbartram/hearthhub-common/service"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"net/http"
@@ -15,7 +14,7 @@ type RefreshSessionHandler struct{}
 
 // HandleRequest Authenticates that a refresh token is valid for a given user id. This returns the entire
 // user object with a refreshed access token.
-func (h *RefreshSessionHandler) HandleRequest(c *gin.Context, ctx context.Context, cognitoService service.CognitoService) {
+func (h *RefreshSessionHandler) HandleRequest(c *gin.Context, ctx context.Context, cognitoService common.CognitoService) {
 	tmp, exists := c.Get("user")
 	if !exists {
 		log.Errorf("user not found in context")

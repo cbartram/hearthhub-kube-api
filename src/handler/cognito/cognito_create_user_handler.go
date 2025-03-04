@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/cbartram/hearthhub-common/model"
-	"github.com/cbartram/hearthhub-mod-api/src/service"
+	common "github.com/cbartram/hearthhub-common/service"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"github.com/stripe/stripe-go/v81"
@@ -21,7 +21,7 @@ type CreateUserRequestHandler struct{}
 // OAuth flow. It will return a Cognito refresh token AND access token which will be used by the Kraken service to authenticate a user
 // in subsequent runs. In subsequent runs a user who is attempting to authenticate must use their refresh token to gain
 // an access token.
-func (h *CreateUserRequestHandler) HandleRequest(c *gin.Context, ctx context.Context, cognitoService service.CognitoService, db *gorm.DB) {
+func (h *CreateUserRequestHandler) HandleRequest(c *gin.Context, ctx context.Context, cognitoService common.CognitoService, db *gorm.DB) {
 	bodyRaw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("could not read body from request: %s", err)
@@ -29,7 +29,7 @@ func (h *CreateUserRequestHandler) HandleRequest(c *gin.Context, ctx context.Con
 		return
 	}
 
-	var reqBody service.CognitoCreateUserRequest
+	var reqBody common.CognitoCreateUserRequest
 	if err := json.Unmarshal(bodyRaw, &reqBody); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
 		return

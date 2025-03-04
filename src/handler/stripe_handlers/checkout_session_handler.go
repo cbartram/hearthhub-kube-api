@@ -1,11 +1,9 @@
 package stripe_handlers
 
 import (
-	"context"
 	"fmt"
-	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 	"github.com/cbartram/hearthhub-common/model"
-	"github.com/cbartram/hearthhub-mod-api/src/service"
+	common "github.com/cbartram/hearthhub-common/service"
 	"github.com/cbartram/hearthhub-mod-api/src/util"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -18,7 +16,7 @@ import (
 
 type CheckoutSessionHandler struct{}
 
-func (h *CheckoutSessionHandler) HandleRequest(c *gin.Context, cognito service.CognitoService) {
+func (h *CheckoutSessionHandler) HandleRequest(c *gin.Context, cognito common.CognitoService) {
 	stripe.Key = os.Getenv("STRIPE_SECRET_KEY")
 	lookupKey, ok := c.GetQuery("key")
 	var foundPrice *stripe.Price
@@ -81,21 +79,6 @@ func (h *CheckoutSessionHandler) HandleRequest(c *gin.Context, cognito service.C
 		log.Errorf("failed to create new stripe_handlers session: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("failed to create new checkout session: %v", err),
-		})
-		return
-	}
-
-	err = cognito.AdminUpdateUserAttributes(context.Background(), user.DiscordID, []types.AttributeType{
-		{
-			Name:  stripe.String("custom:stripe_customer_id"),
-			Value: stripe.String(user.CustomerId),
-		},
-	})
-
-	if err != nil {
-		log.Errorf("failed to update customer id in cognito: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("failed to update customer id in cognito: %v", err),
 		})
 		return
 	}

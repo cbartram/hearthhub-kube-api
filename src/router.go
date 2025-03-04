@@ -133,7 +133,7 @@ func NewRouter(ctx context.Context, wrapper *service.Wrapper) (*gin.Engine, *Web
 
 	serverGroup.GET("/", func(c *gin.Context) {
 		h := server.GetServerHandler{}
-		h.HandleRequest(c)
+		h.HandleRequest(c, wrapper.HearthhubDb)
 	})
 
 	serverGroup.POST("/create", func(c *gin.Context) {
@@ -143,7 +143,7 @@ func NewRouter(ctx context.Context, wrapper *service.Wrapper) (*gin.Engine, *Web
 
 	serverGroup.DELETE("/delete", func(c *gin.Context) {
 		h := server.DeleteServerHandler{}
-		h.HandleRequest(c, wrapper.KubeService, wrapper.CognitoService, ctx)
+		h.HandleRequest(c, wrapper)
 	})
 
 	serverGroup.PUT("/update", func(c *gin.Context) {

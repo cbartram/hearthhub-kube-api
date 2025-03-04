@@ -6,11 +6,11 @@ import (
 	"errors"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 	"github.com/cbartram/hearthhub-mod-api/src"
-	"github.com/cbartram/hearthhub-mod-api/src/cfg"
 	"github.com/cbartram/hearthhub-mod-api/src/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stripe/stripe-go/v81"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -91,8 +91,8 @@ func TestHandleScaleServerHandlerRoute(t *testing.T) {
 			cognitoAttributesError: nil,
 			cognitoAttributes: []types.AttributeType{
 				{
-					Name:  cfg.stringPtr("custom:server_details"),
-					Value: cfg.stringPtr(`{"state": "running"}`),
+					Name:  stripe.String("custom:server_details"),
+					Value: stripe.String(`{"state": "running"}`),
 				},
 			},
 		},
@@ -107,8 +107,8 @@ func TestHandleScaleServerHandlerRoute(t *testing.T) {
 			cognitoAttributesError: nil,
 			cognitoAttributes: []types.AttributeType{
 				{
-					Name:  cfg.stringPtr("custom:server_details"),
-					Value: cfg.stringPtr(`{"state": "terminated"}`),
+					Name:  stripe.String("custom:server_details"),
+					Value: stripe.String(`{"state": "terminated"}`),
 				},
 			},
 		},
@@ -123,8 +123,8 @@ func TestHandleScaleServerHandlerRoute(t *testing.T) {
 			cognitoAttributesError: nil,
 			cognitoAttributes: []types.AttributeType{
 				{
-					Name:  cfg.stringPtr("custom:server_details"),
-					Value: cfg.stringPtr(`{"state": "terminated"}`),
+					Name:  stripe.String("custom:server_details"),
+					Value: stripe.String(`{"state": "terminated"}`),
 				},
 			},
 			cognitoUpdateError: errors.New("unauthorized field"),

@@ -210,7 +210,7 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, ctx context.Context,
 		return
 	}
 
-	c.JSON(http.StatusOK, valheimServer)
+	c.JSON(http.StatusOK, user.Servers[0])
 }
 
 // CreateDedicatedServerDeployment Creates the valheim dedicated src deployment and pvc given the src configuration.
@@ -440,8 +440,7 @@ func CreateDedicatedServerDeployment(world *model.WorldDetails, kubeService serv
 
 // MakePvc Returns the PVC object from the Kubernetes API for creating a new volume.
 func MakePvc(name string, deploymentName string, discordId string) *corev1.PersistentVolumeClaim {
-	// We only need a persistent volume for the plugins that will be installed. Need to shut down src, mount
-	// pvc to a Job, install plugins to pvc, restart src, re-mount pvc
+	// We only need a persistent volume for the plugins that will be installed.
 	// Game files like backups and world files will be (eventually) persisted to s3 by
 	// the sidecar container so EmptyDir{} can be used for those.
 	return &corev1.PersistentVolumeClaim{

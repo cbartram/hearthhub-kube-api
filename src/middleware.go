@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"github.com/cbartram/hearthhub-mod-api/src/service"
+	common "github.com/cbartram/hearthhub-common/service"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -42,7 +42,7 @@ func CORSMiddleware() gin.HandlerFunc {
 
 // AuthMiddleware is the custom authentication middleware that checks the Authorization header to ensure a given
 // discord id belong to a given refresh token.
-func AuthMiddleware(cognito service.CognitoService, db *gorm.DB) gin.HandlerFunc {
+func AuthMiddleware(cognito common.CognitoService, db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {

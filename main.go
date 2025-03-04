@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/cbartram/hearthhub-common/model"
+	common "github.com/cbartram/hearthhub-common/service"
 	"github.com/cbartram/hearthhub-mod-api/src"
 	"github.com/cbartram/hearthhub-mod-api/src/handler/stripe_handlers"
 	"github.com/cbartram/hearthhub-mod-api/src/service"
@@ -50,7 +51,7 @@ func main() {
 	db := model.Connect()
 	stripeService := service.MakeStripeService()
 	kubeService := service.MakeKubernetesService(kubeConfig)
-	cognitoService := service.MakeCognitoService(cfg)
+	cognitoService := common.MakeCognitoService(cfg)
 	discordService, err := service.MakeDiscordService()
 	if err != nil {
 		log.Fatalf("failed to make discord service: %v", err)

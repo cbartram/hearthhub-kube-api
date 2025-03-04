@@ -115,7 +115,7 @@ func TestHandleDeleteServerRoute(t *testing.T) {
 					c.Set("user", tt.cognitoUser)
 				}
 
-				handler.HandleRequest(c, mockKubeClient, mockCognitoService, context.TODO())
+				handler.HandleRequest(c, mockKubeClient, mockCognitoService)
 			})
 
 			req, err := http.NewRequest("DELETE", "/api/v1/server/delete", tt.requestBody)
