@@ -10,6 +10,7 @@ import (
 	"io"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/client-go/util/retry"
 	"net/http"
 )
 
@@ -81,17 +82,18 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, w *service.Wrapper) {
 		return
 	}
 
-	scale, err := w.KubeService.GetClient().AppsV1().Deployments("hearthhub").GetScale(context.TODO(), deploymentName, metav1.GetOptions{})
-	if err != nil {
-		log.Errorf("failed to get deployment scale from kubernetes api: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get deployment scale from kubernetes api: %v", err)})
-		return
-	}
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		scale, err := w.KubeService.GetClient().AppsV1().Deployments("hearthhub").GetScale(context.TODO(), deploymentName, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		scale.Spec.Replicas = *reqBody.Replicas
+		_, err = w.KubeService.GetClient().AppsV1().Deployments("hearthhub").UpdateScale(context.TODO(), deploymentName, scale, metav1.UpdateOptions{})
+		return err
+	})
 
-	scale.Spec.Replicas = *reqBody.Replicas
-	_, err = w.KubeService.GetClient().AppsV1().Deployments("hearthhub").UpdateScale(context.TODO(), deploymentName, scale, metav1.UpdateOptions{})
 	if err != nil {
-		log.Errorf("failed to update deployment scale: %v", err)
+		log.Errorf("failed to update deployment scale after multiple attempts: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to update deployment scale: %v", err)})
 		return
 	}
@@ -101,7 +103,7 @@ func (h *ScaleServerHandler) HandleRequest(c *gin.Context, w *service.Wrapper) {
 		state = model.RUNNING
 	}
 	server.State = state
-	tx := w.HearthhubDb.Save(server)
+	tx := w.HearthhubDb.Save(&server)
 	if tx.Error != nil {
 		log.Errorf("could not update server state: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("could not update server state: %s", err)})

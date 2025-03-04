@@ -209,15 +209,12 @@ func (h *CreateServerHandler) HandleRequest(c *gin.Context, ctx context.Context,
 		return
 	}
 
-	server.UserID = user.ID
-	world.ServerID = server.ID
-
-	worldDetailsTx := w.HearthhubDb.Create(world)
-	if worldDetailsTx.Error != nil {
-		log.Errorf("could not save world details: %s", worldDetailsTx.Error)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not save world details: " + worldDetailsTx.Error.Error()})
-		return
-	}
+	//worldDetailsTx := w.HearthhubDb.Create(world)
+	//if worldDetailsTx.Error != nil {
+	//	log.Errorf("could not save world details: %s", worldDetailsTx.Error)
+	//	c.JSON(http.StatusInternalServerError, gin.H{"error": "could not save world details: " + worldDetailsTx.Error.Error()})
+	//	return
+	//}
 
 	user.Servers = []model.Server{*server}
 	tx := w.HearthhubDb.Save(user)
@@ -443,6 +440,7 @@ func CreateDedicatedServerDeployment(world *model.WorldDetails, kubeService serv
 	world.InstanceID = ""
 	return &model.Server{
 		Name:           world.Name,
+		UserID:         user.ID,
 		ServerIP:       ip,
 		ServerPort:     serverPort,
 		ServerCPU:      world.CPURequests,
