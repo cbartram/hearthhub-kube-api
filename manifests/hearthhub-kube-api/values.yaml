@@ -35,7 +35,7 @@ image:
 
   # file manager / plugin manager
   fileManagerImageName: "cbartram/hearthhub-plugin-manager"
-  fileManagerImageVersion: "0.0.33"
+  fileManagerImageVersion: "0.0.35"
 
 serviceAccountName: hearthhub-api-sa
 
