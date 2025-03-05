@@ -31,7 +31,7 @@ image:
 
   # sidecar / backup manager
   backupManagerImageName: "cbartram/hearthhub-sidecar"
-  backupManagerImageVersion: "0.0.41"
+  backupManagerImageVersion: "0.0.42"
 
   # file manager / plugin manager
   fileManagerImageName: "cbartram/hearthhub-plugin-manager"
