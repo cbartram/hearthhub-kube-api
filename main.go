@@ -48,10 +48,6 @@ func main() {
 		log.Printf("local kube config loaded successfully")
 	}
 
-	db := model.Connect()
-	stripeService := service.MakeStripeService()
-	kubeService := service.MakeKubernetesService(kubeConfig)
-	cognitoService := common.MakeCognitoService(cfg)
 	discordService, err := service.MakeDiscordService()
 	if err != nil {
 		log.Fatalf("failed to make discord service: %v", err)
@@ -65,23 +61,25 @@ func main() {
 		logrus.Fatalf("failed to make rabbitmq service: %v", err)
 	}
 
+	w := service.Wrapper{
+		DiscordService:  discordService,
+		S3Service:       s3Service,
+		RabbitMQService: rabbitMqService,
+		CognitoService:  common.MakeCognitoService(cfg),
+		KubeService:     service.MakeKubernetesService(kubeConfig),
+		StripeService:   service.MakeStripeService(),
+		HearthhubDb:     model.Connect(),
+		ModNexusService: service.MakeModNexusService(),
+	}
+	router, wsManager := src.NewRouter(context.Background(), &w)
+
 	// Registers a new go routine listening to the stripe-webhooks channel. New messages are enqueued when the /api/v1/stripe/webhook
 	// endpoint is called and this function consumes the messages with a 5-second delay in between each message resolving eventual consistency
 	// issues with both cognito and stripe when many events are sent at checkout.
-	err = rabbitMqService.RegisterConsumer(stripe_handlers.ConsumeMessageWithDelay, 3*time.Second, db)
+	err = rabbitMqService.RegisterConsumer(stripe_handlers.ConsumeMessageWithDelay, 3*time.Second, w.HearthhubDb)
 	if err != nil {
 		logrus.Errorf("failed to register stripe webhook message consumer: %v", err)
 	}
-
-	router, wsManager := src.NewRouter(context.Background(), &service.Wrapper{
-		DiscordService:  discordService,
-		S3Service:       s3Service,
-		CognitoService:  cognitoService,
-		KubeService:     kubeService,
-		StripeService:   stripeService,
-		RabbitMQService: rabbitMqService,
-		HearthhubDb:     db,
-	})
 
 	defer func() {
 		logrus.Infof("Closing websocket connection and channel")

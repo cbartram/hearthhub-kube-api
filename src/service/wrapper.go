@@ -13,4 +13,5 @@ type Wrapper struct {
 	KubeService     KubernetesService
 	RabbitMQService *RabbitMqService
 	HearthhubDb     *gorm.DB
+	ModNexusService *ModNexusService
 }

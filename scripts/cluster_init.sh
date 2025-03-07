@@ -22,6 +22,8 @@ kubectl create secret generic rabbitmq-secrets -n hearthhub --from-literal=RABBI
 kubectl create secret generic stripe-secrets-test -n hearthhub --from-literal=STRIPE_SECRET_KEY="$STRIPE_TEST_SECRET_KEY" --from-literal=STRIPE_ENDPOINT_SECRET="$STRIPE_TEST_ENDPOINT_SECRET"
 kubectl create secret generic stripe-secrets-live -n hearthhub --from-literal=STRIPE_SECRET_KEY="$STRIPE_LIVE_SECRET_KEY" --from-literal=STRIPE_ENDPOINT_SECRET="$STRIPE_LIVE_ENDPOINT_SECRET"
 
+kubectl create secret generic mod-nexus-secrets -n hearthhub --from-literal=MOD_NEXUS_API_KEY="$MOD_NEXUS_API_KEY"
+
 # MySQL DB
 kubectl create secret generic mysql-secrets -n hearthhub --from-literal=MYSQL_ROOT_PASSWORD="$MYSQL_ROOT_PASSWORD" --from-literal=MYSQL_PASSWORD="$MYSQL_PASSWORD" --from-literal=MYSQL_DATABASE="$MYSQL_DATABASE" --from-literal=MYSQL_USER="$MYSQL_USER"
 
