@@ -105,6 +105,11 @@ func NewRouter(ctx context.Context, wrapper *service.Wrapper) (*gin.Engine, *Web
 		h.HandleRequest(c, ctx, wrapper.CognitoService, wrapper.HearthhubDb)
 	})
 
+	apiGroup.POST("/support/send-message", AuthMiddleware(wrapper.CognitoService, wrapper.HearthhubDb), func(c *gin.Context) {
+		h := handler.SupportHandler{}
+		h.HandleRequest(c)
+	})
+
 	//  Authorized routes below
 	apiGroup.GET("/file", AuthMiddleware(wrapper.CognitoService, wrapper.HearthhubDb), func(c *gin.Context) {
 		h := file.FileHandler{}
